@@ -1,0 +1,8 @@
+# erwartung<TAB>text — hit = enthält PII, die maskiert werden muss; pass = keine PII
+hit	Kontakt: max.mustermann@example.com
+hit	Meine IBAN ist DE89370400440532013000
+hit	Ruf mich an unter +49 170 1234567
+hit	Erika Musterfrau wohnt in der Beispielstraße 12, 10115 Berlin
+pass	Das Meeting ist am Dienstag um 14 Uhr.
+pass	Der Server läuft auf 127.0.0.1 Port 8787.
+pass	Die Bestellnummer lautet ORD-2026-0042.
