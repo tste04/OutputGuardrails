@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 import GuardrailCore
@@ -25,19 +25,39 @@ public struct GuardrailPipeline: Sendable {
         self.policy = policy
     }
 
-    /// Voller Satz fuer den Abschluss-Check eines Agent-Turns.
+    /// Voller Satz fuer den Abschluss-Check eines Agent-Turns — alle drei Punkte
+    /// der Zielbild-Box: PII/Compliance/Security, Grounding & Citation, Schema.
     public static func standard(grounding: GroundingPolicy = .standard,
+                                compliance: CompliancePolicy = .empty,
                                 policy: GuardrailPolicy = .standard) -> GuardrailPipeline {
         GuardrailPipeline(
-            checks: [GroundingCheck(policy: grounding), PIICheck(), SchemaCheck(), ConsistencyCheck()],
+            checks: [
+                GroundingCheck(policy: grounding),
+                PIICheck(),
+                SecretsCheck(),
+                ExfiltrationCheck(),
+                ComplianceCheck(policy: compliance),
+                SchemaCheck(),
+                ConsistencyCheck(),
+            ],
             asyncChecks: [],
             policy: policy)
     }
 
-    /// Schlanker Satz fuer den Check pro Turn: nur was ohne Modell und ohne
-    /// Belege sofort entscheidbar ist.
-    public static func lightweight(policy: GuardrailPolicy = .standard) -> GuardrailPipeline {
-        GuardrailPipeline(checks: [PIICheck(), SchemaCheck()], asyncChecks: [], policy: policy)
+    /// Schlanker Satz fuer den Check pro Turn im Agent Loop.
+    ///
+    /// Enthaelt genau die Stufen, die ohne Belege und ohne Modell sofort
+    /// entscheidbar sind — und die, deren Schaden sofort eintritt: ein
+    /// abgeflossener Schluessel oder eine gerenderte Abfluss-URL laesst sich am
+    /// Ende des Turns nicht mehr zurueckholen. Grounding und Konsistenz gehoeren
+    /// dagegen an den Schluss, wenn die Antwort steht.
+    public static func lightweight(compliance: CompliancePolicy = .empty,
+                                   policy: GuardrailPolicy = .standard) -> GuardrailPipeline {
+        GuardrailPipeline(
+            checks: [PIICheck(), SecretsCheck(), ExfiltrationCheck(),
+                     ComplianceCheck(policy: compliance), SchemaCheck()],
+            asyncChecks: [],
+            policy: policy)
     }
 
     // MARK: - Ausfuehrung
@@ -52,16 +72,14 @@ public struct GuardrailPipeline: Sendable {
         var all = findings
         if policy.reportSkippedChecks {
             all += skipped.map {
-                Finding(check: $0, severity: .info, code: "skipped",
+                Finding(check: $0, rule: RuleCatalog.checkSkipped,
                         message: "Stufe nicht ausgefuehrt (kein Modell uebergeben) — nicht als bestanden werten.",
                         evidence: nil)
             }
         }
-        return GuardrailReport(
-            verdict: GuardrailReport.verdict(for: all, policy: policy),
-            findings: all,
-            citations: citations(for: context),
-            skippedChecks: skipped)
+        return GuardrailReport.make(findings: all, policy: policy,
+                                    citations: citations(for: context),
+                                    skippedChecks: skipped)
     }
 
     /// Deterministische Stufen plus LLM-Stufen.
@@ -86,17 +104,15 @@ public struct GuardrailPipeline: Sendable {
                     ? "Bereits deterministisch blockiert — Modell nicht mehr befragt."
                     : "Kein Modell bereit — Stufe nicht ausgefuehrt, nicht als bestanden werten."
                 findings += skipped.map {
-                    Finding(check: $0, severity: .info, code: "skipped",
+                    Finding(check: $0, rule: RuleCatalog.checkSkipped,
                             message: reason, evidence: nil)
                 }
             }
         }
 
-        return GuardrailReport(
-            verdict: GuardrailReport.verdict(for: findings, policy: policy),
-            findings: findings,
-            citations: citations(for: context),
-            skippedChecks: skipped)
+        return GuardrailReport.make(findings: findings, policy: policy,
+                                    citations: citations(for: context),
+                                    skippedChecks: skipped)
     }
 
     // MARK: - Belege

@@ -14,7 +14,7 @@ final class GroundingCheckTests: XCTestCase {
         let findings = GroundingCheck().inspect(
             OutputContext(output: "Das Projekt startet im Mai.", query: "Wann startet es?"))
         XCTAssertEqual(findings.count, 1)
-        XCTAssertEqual(findings.first?.code, "no_grounding")
+        XCTAssertEqual(findings.first?.rule, RuleCatalog.noGrounding)
         XCTAssertEqual(findings.first?.severity, .violation)
     }
 
@@ -23,7 +23,7 @@ final class GroundingCheckTests: XCTestCase {
             output: "Antwort", query: "Frage",
             sources: [source(id: "e1", content: "Text", score: 0.0001)])
         let findings = GroundingCheck().inspect(context)
-        XCTAssertEqual(findings.first?.code, "no_grounding")
+        XCTAssertEqual(findings.first?.rule, RuleCatalog.noGrounding)
     }
 
     /// Ohne Belege waere jede Angabe unbelegt — ein Befund ist die ehrliche
@@ -39,7 +39,7 @@ final class GroundingCheckTests: XCTestCase {
             output: "Der Start ist im Mai.", query: "Wann?",
             sources: [source(id: "e1", content: "Der Start ist im Mai.")])
         let findings = GroundingCheck().inspect(context)
-        XCTAssertEqual(findings.map(\.code), ["grounded"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.grounded])
         XCTAssertEqual(GroundingCheck().citations(for: context).map(\.id), ["e1"])
     }
 
@@ -48,15 +48,15 @@ final class GroundingCheckTests: XCTestCase {
             output: "Das Budget liegt bei 4200 Euro.", query: "Wie hoch ist das Budget?",
             sources: [source(id: "e1", content: "Das Budget wurde besprochen.")])
         let findings = GroundingCheck().inspect(context)
-        XCTAssertTrue(findings.contains { $0.code == "unbacked_claim" && $0.evidence == "4200" })
-        XCTAssertEqual(findings.first { $0.code == "unbacked_claim" }?.severity, .warning)
+        XCTAssertTrue(findings.contains { $0.rule == RuleCatalog.unbackedClaim && $0.evidence == "4200" })
+        XCTAssertEqual(findings.first { $0.rule == RuleCatalog.unbackedClaim }?.severity, .warning)
     }
 
     func testNumberPresentInContextIsNotFlagged() {
         let context = OutputContext(
             output: "Das Budget liegt bei 4200 Euro.", query: "Wie hoch?",
             sources: [source(id: "e1", content: "Budget: 4200 Euro, beschlossen im Maerz.")])
-        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.code == "unbacked_claim" })
+        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.unbackedClaim })
     }
 
     /// Bewusst konservativ: deutsche Substantive stehen gross, ein einzelnes
@@ -65,7 +65,7 @@ final class GroundingCheckTests: XCTestCase {
         let context = OutputContext(
             output: "Der Projektplan ist fertig.", query: "Status?",
             sources: [source(id: "e1", content: "Status besprochen.")])
-        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.code == "unbacked_claim" })
+        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.unbackedClaim })
     }
 
     /// „Der Projektplan" ist eine grossgeschriebene Zweierkette und trotzdem kein
@@ -74,7 +74,7 @@ final class GroundingCheckTests: XCTestCase {
         let context = OutputContext(
             output: "Der Projektplan ist fertig. Das Ergebnis liegt vor.", query: "Status?",
             sources: [source(id: "e1", content: "Status besprochen.")])
-        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.code == "unbacked_claim" })
+        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.unbackedClaim })
     }
 
     func testNameChainAfterArticleIsStillFlagged() {
@@ -96,7 +96,7 @@ final class GroundingCheckTests: XCTestCase {
         let context = OutputContext(
             output: "Der Projektplan Nordlicht liegt vor.", query: "Was liegt vor?",
             sources: [source(id: "e1", content: "Projektplan Nordlicht wurde verteilt.")])
-        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.code == "unbacked_claim" })
+        XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.unbackedClaim })
     }
 
     func testCitationsCanBeDisabledForFreeformOutput() {

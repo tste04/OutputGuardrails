@@ -63,7 +63,7 @@ final class GuardrailPipelineTests: XCTestCase {
                                          asyncChecks: [LLMConsistencyCheck()])
         let report = pipeline.inspect(groundedContext(output: "Der Start ist im Mai."))
         XCTAssertEqual(report.skippedChecks, ["consistency_llm"])
-        XCTAssertTrue(report.findings.contains { $0.code == "skipped" })
+        XCTAssertTrue(report.findings.contains { $0.rule == RuleCatalog.checkSkipped })
         XCTAssertEqual(report.verdict, .allow)
     }
 
@@ -114,7 +114,7 @@ final class GuardrailPipelineTests: XCTestCase {
     func testStandardSetEnforcesGrounding() {
         let report = GuardrailPipeline.standard().inspect(OutputContext(output: "Behauptung ohne Beleg"))
         XCTAssertEqual(report.verdict, .block)
-        XCTAssertEqual(report.findings(from: "grounding").first?.code, "no_grounding")
+        XCTAssertEqual(report.findings(from: "grounding").first?.rule, RuleCatalog.noGrounding)
     }
 
     /// Die Audit-Zeile darf den geprueften Inhalt nicht erneut ausbreiten.
@@ -122,7 +122,7 @@ final class GuardrailPipelineTests: XCTestCase {
         let report = GuardrailPipeline(checks: [PIICheck()])
             .inspect(OutputContext(output: "Mail an max.mustermann@example.com"))
         XCTAssertTrue(report.auditLine.contains("verdict=block"))
-        XCTAssertTrue(report.auditLine.contains("pii/pii_mail"))
+        XCTAssertTrue(report.auditLine.contains("PII-001"))
         XCTAssertFalse(report.auditLine.contains("max.mustermann"))
     }
 }

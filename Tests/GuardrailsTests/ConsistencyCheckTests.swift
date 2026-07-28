@@ -87,7 +87,7 @@ final class ConsistencyCheckTests: XCTestCase {
     func testConfirmedContradictionIsAViolation() async {
         let llm = StubLLM(response: #"{"contradiction": true, "confidence": 0.9, "explanation": "Zwei Arbeitgeber"}"#)
         let findings = await LLMConsistencyCheck().inspect(collidingContext, llm: llm)
-        XCTAssertEqual(findings.map(\.code), ["contradiction_confirmed"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.contradictionConfirmed])
         XCTAssertEqual(findings.first?.severity, .violation)
     }
 
@@ -107,14 +107,14 @@ final class ConsistencyCheckTests: XCTestCase {
     func testModelFailureLeavesCandidateOpen() async {
         let llm = StubLLM(failure: StubError())
         let findings = await LLMConsistencyCheck().inspect(collidingContext, llm: llm)
-        XCTAssertEqual(findings.map(\.code), ["verification_failed"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.verificationFailed])
         XCTAssertEqual(findings.first?.severity, .warning)
     }
 
     func testUnparsableAnswerLeavesCandidateOpen() async {
         let llm = StubLLM(response: "Kann ich nicht sagen.")
         let findings = await LLMConsistencyCheck().inspect(collidingContext, llm: llm)
-        XCTAssertEqual(findings.map(\.code), ["unverifiable"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.unverifiable])
     }
 
     func testNoCandidatesMeansNoModelCall() async {

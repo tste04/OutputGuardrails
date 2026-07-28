@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 import GuardrailCore
@@ -31,6 +31,18 @@ public struct GroundingPolicy: Codable, Sendable, Equatable {
         self.minScore = minScore
         self.requireCitations = requireCitations
         self.checkUnbackedClaims = checkUnbackedClaims
+    }
+
+    /// Wie bei `GuardrailPolicy`: nicht genannte Felder behalten die
+    /// Voreinstellung, damit eine Policy-Datei nur das Abweichende nennen muss.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = GroundingPolicy()
+        minScore = try c.decodeIfPresent(Double.self, forKey: .minScore) ?? fallback.minScore
+        requireCitations = try c.decodeIfPresent(Bool.self, forKey: .requireCitations)
+            ?? fallback.requireCitations
+        checkUnbackedClaims = try c.decodeIfPresent(Bool.self, forKey: .checkUnbackedClaims)
+            ?? fallback.checkUnbackedClaims
     }
 
     /// Konservativer Default. EHRLICH: RRF-Scores sind RANG-basiert (1/(k+rank)) —
@@ -73,7 +85,7 @@ public struct GroundingCheck: GuardrailCheck {
                 ? "Keine Belege uebergeben — der Ausgang steht auf nichts."
                 : "Nur schwache Treffer (bester Score unter minScore=\(policy.minScore)) — nicht belegbar."
             findings.append(Finding(
-                check: name, severity: .violation, code: "no_grounding",
+                check: name, rule: RuleCatalog.noGrounding,
                 message: reason,
                 evidence: "sources=\(context.sources.count) grounded=0"))
             // Ohne Belege ist die Nachpruefung gegen den Kontext sinnlos:
@@ -82,7 +94,7 @@ public struct GroundingCheck: GuardrailCheck {
         }
 
         findings.append(Finding(
-            check: name, severity: .info, code: "grounded",
+            check: name, rule: RuleCatalog.grounded,
             message: "Ausgang steht auf \(grounded.count) Beleg(en).",
             evidence: grounded.map(\.id).joined(separator: ",")))
 
@@ -91,7 +103,7 @@ public struct GroundingCheck: GuardrailCheck {
         let contextText = grounded.map { "\($0.title) \($0.content)" }.joined(separator: "\n")
         for claim in Self.unbackedClaims(in: context.output, context: contextText, query: context.query) {
             findings.append(Finding(
-                check: name, severity: .warning, code: "unbacked_claim",
+                check: name, rule: RuleCatalog.unbackedClaim,
                 message: "Angabe kommt weder im Kontext noch in der Frage vor — als unsicher behandeln.",
                 evidence: claim))
         }

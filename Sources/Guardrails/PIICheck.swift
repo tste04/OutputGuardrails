@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 import GuardrailCore
@@ -21,6 +21,18 @@ public enum PIICategory: String, Codable, Sendable, CaseIterable {
     case iban
     case address
     case person
+
+    /// Die Katalogregel dieser Kategorie. Gewicht und Schweregrad stehen im
+    /// `RuleCatalog`, nicht hier — die Stufe erkennt, die Policy entscheidet.
+    public var rule: RuleID {
+        switch self {
+        case .mail: return RuleCatalog.piiMail
+        case .phone: return RuleCatalog.piiPhone
+        case .iban: return RuleCatalog.piiIBAN
+        case .address: return RuleCatalog.piiAddress
+        case .person: return RuleCatalog.piiPerson
+        }
+    }
 }
 
 /// Ein Fund im Ausgang. `value` bleibt im Prozess — in Befunde wandert nur die
@@ -140,7 +152,7 @@ public struct PIICheck: GuardrailCheck {
 
     public func inspect(_ context: OutputContext) -> [Finding] {
         detect(in: context.output).map { match in
-            Finding(check: name, severity: .violation, code: "pii_\(match.category.rawValue)",
+            Finding(check: name, rule: match.category.rule,
                     message: "Personenbezug im Ausgang (\(match.category.rawValue)) — nicht ungeschuetzt ausliefern.",
                     evidence: match.masked)
         }

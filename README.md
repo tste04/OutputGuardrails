@@ -22,13 +22,40 @@ im [AIGateway](https://github.com/tste04/AIGateway).
 
 ## Was geprüft wird
 
-| Stufe | Prüft | Befund |
-|---|---|---|
-| `GroundingCheck` | Steht der Ausgang auf abrufbaren Belegen? Kommen Zahlen und Namen im Kontext vor? | `no_grounding` (Regelbruch), `unbacked_claim` (Warnung) |
-| `PIICheck` | Personenbezug im Ausgang: Mail, Telefon, IBAN, Adresse, Name, eigene Denylist | `pii_*` (Regelbruch) |
-| `SchemaCheck` | Hat strukturierter Ausgang die zugesagte Form? | `invalid_json`, `missing_required`, `type_mismatch`, `enum_mismatch`, … |
-| `ConsistencyCheck` | Widerspricht eine Behauptung einem bekannten Fakt? | `contradiction_candidate` (Warnung) |
-| `LLMConsistencyCheck` | Bestätigt ein Modell den Widerspruch? | `contradiction_confirmed` (Regelbruch) |
+| Stufe | Zielbild-Punkt | Prüft | Regel-IDs |
+|---|---|---|---|
+| `GroundingCheck` | Grounding & Citation Check | Steht der Ausgang auf abrufbaren Belegen? Kommen Zahlen und Namen im Kontext vor? | `GRO-001`, `GRO-002` |
+| `PIICheck` | PII | Mail, Telefon, IBAN, Anschrift, Name, eigene Denylist | `PII-001`…`PII-005` |
+| `SecretsCheck` | Security | Zugangsdaten: privater Schlüssel, AWS, GitHub, Slack, JWT, `sk-` | `SEC-001`…`SEC-006` |
+| `ExfiltrationCheck` | Security | Abflusskanäle (Bild-/Link-URL mit Nutzlast), Injection-Echo, zerstörerische Befehle | `EXF-001`…`EXF-004` |
+| `ComplianceCheck` | Compliance | Pflichthinweise, untersagte Formulierungen, Längengrenze — vollständig konfiguriert | `CMP-001`…`CMP-003` |
+| `SchemaCheck` | Schema Validation | Hat strukturierter Ausgang die zugesagte Form? | `SCH-001`…`SCH-007` |
+| `ConsistencyCheck` | (ergänzend) | Widerspricht eine Behauptung einem bekannten Fakt? | `CON-001` |
+| `LLMConsistencyCheck` | (ergänzend) | Bestätigt ein Modell den Widerspruch? | `CON-002`…`CON-004` |
+
+Vollständige Gegenüberstellung mit dem Zielbild — auch was bewusst **nicht** hier
+liegt: **[docs/ZIELBILD-ABDECKUNG.md](docs/ZIELBILD-ABDECKUNG.md)**.
+
+## Standalone
+
+Als Bibliothek, als Kommandozeilenwerkzeug oder als HTTP-Dienst — ohne Engram,
+ohne AIGateway, ohne AIRouter. Ausführlich in
+**[docs/STANDALONE.md](docs/STANDALONE.md)**.
+
+```bash
+swift build -c release
+.build/release/guardrails selftest
+
+# Prüfen. Exit-Code: 0 allow · 1 flag · 2 block
+guardrails check --input antwort.txt --source kontext.md --query "Wann?" --config policy.json
+
+# Als Dienst: POST /inspect · GET /rules · GET /health, gebunden auf 127.0.0.1
+guardrails serve --port 8790 --config policy.json
+```
+
+Schwellen, Suppressions und die Compliance-Regeln der Organisation stehen in
+einer Policy-Datei, nicht im Code (`guardrails config > policy.json`) — das ist
+die Andockstelle für den Feedback-Loop des Zielbilds.
 
 ## Leitsätze
 
@@ -40,6 +67,16 @@ im [AIGateway](https://github.com/tste04/AIGateway).
   und maskierte Fundstellen (`ma***@example.com`), nie der geprüfte Inhalt.
 - **Deterministisch zuerst.** Erst die billigen, reproduzierbaren Stufen; ein
   bereits geblockter Ausgang kostet kein Modell mehr.
+- **Stufen erkennen, die Policy entscheidet.** Eine Prüfstufe nennt nur die
+  Regel-ID; Schweregrad und Gewicht stehen im Regelkatalog, die Schwellen in der
+  Policy. Schwellen ändern heißt nie, eine Erkennungsregel anzufassen.
+- **Regel-IDs sind stabil.** `GRO-001`, `PII-003`, `SEC-001`, … Suppressions,
+  Audit und Dashboards binden daran; eine ID zu ändern ist ein Breaking Change.
+  Die `SEC`-Reihe teilt die IDs bewusst mit der Eingangs-Firewall im AIGateway.
+- **Fehlalarme sind teuer.** Ein Fehlalarm blockiert eine korrekte Antwort.
+  Deshalb brauchen die Muster strukturelle Anker statt „viele Ziffern":
+  Telefon verlangt `+` oder führende `0`, Namensketten filtern deutsche
+  Satzanfänge — sonst meldet „Das Meeting" eine Person.
 
 ## Schnellstart
 
@@ -56,7 +93,7 @@ let report = GuardrailPipeline.standard().inspect(context)
 
 switch report.verdict {
 case .allow: liefereAus(antwortDesModells, belege: report.citations)
-case .flag:  liefereAus(antwortDesModells, belege: report.citations, hinweise: report.findings)
+case .flag:  zurFreigabe(antwortDesModells, risiko: report.riskScore, befunde: report.findings)
 case .block: verweigere(grund: report.findings)
 }
 
@@ -102,6 +139,11 @@ blockt:
 | `.strict` | Warnung | Info | Ausgänge, die ohne Mensch weitergehen (Auto-Execute) |
 | `.observeOnly` | Regelbruch | Info | Beobachtungsbetrieb beim Einführen |
 
+Der Bericht trägt zusätzlich `riskScore` (Summe der Regelgewichte, gedeckelt auf
+1.0) und `requiresApproval` — das Signal für die Risk-based-Approval-Stufe
+dahinter: `allow` → Auto-Execute, `flag` → Human Approval, `block` → gar nicht
+erst weiter.
+
 Fertige Sätze: `GuardrailPipeline.standard()` für den vollen Abschluss-Check,
 `.lightweight()` für den Check pro Turn im Agent Loop.
 
@@ -109,8 +151,10 @@ Fertige Sätze: `GuardrailPipeline.standard()` für den vollen Abschluss-Check,
 
 | Target | Inhalt | Abhängigkeiten |
 |---|---|---|
-| `GuardrailCore` | Typen und Verträge: `Finding`, `Severity`, `Verdict`, `OutputContext`, `SchemaNode`, `GuardrailCheck`, `GuardrailLLM` | keine |
+| `GuardrailCore` | Typen und Verträge: `Finding`, `Severity`, `Verdict`, `RuleID`, `RuleCatalog`, `OutputContext`, `SchemaNode`, `GuardrailCheck`, `GuardrailLLM` | keine |
 | `Guardrails` | Die Prüfstufen und die Pipeline | `GuardrailCore` |
+| `GuardrailServer` | Policy-Datei, JSON-Bericht, HTTP-Dienst | + `Guardrails` |
+| `guardrails` | Kommandozeile | alle drei |
 
 ## Herkunft
 

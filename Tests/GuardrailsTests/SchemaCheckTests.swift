@@ -25,41 +25,41 @@ final class SchemaCheckTests: XCTestCase {
         let findings = report("""
         {"title": "Fix", "priority": "high", "storyPoints": 3, "labels": ["bug"]}
         """)
-        XCTAssertEqual(findings.map(\.code), ["schema_ok"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.schemaOK])
     }
 
     func testMissingRequiredFieldIsAViolation() {
         let findings = report(#"{"title": "Fix"}"#)
-        XCTAssertEqual(findings.map(\.code), ["missing_required"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.missingRequired])
         XCTAssertEqual(findings.first?.evidence, "$.priority")
         XCTAssertEqual(findings.first?.severity, .violation)
     }
 
     func testTypeMismatchIsReportedWithPath() {
         let findings = report(#"{"title": "Fix", "priority": "high", "storyPoints": "drei"}"#)
-        XCTAssertEqual(findings.map(\.code), ["type_mismatch"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.typeMismatch])
         XCTAssertEqual(findings.first?.evidence, "$.storyPoints")
     }
 
     func testEnumViolationIsCaught() {
         let findings = report(#"{"title": "Fix", "priority": "urgent"}"#)
-        XCTAssertEqual(findings.map(\.code), ["enum_mismatch"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.enumMismatch])
     }
 
     /// Ein `true` darf nicht als Zahl durchgehen — in JSON ist es eine NSNumber.
     func testBooleanIsNotAnInteger() {
         let findings = report(#"{"title": "Fix", "priority": "low", "storyPoints": true}"#)
-        XCTAssertEqual(findings.map(\.code), ["type_mismatch"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.typeMismatch])
     }
 
     func testFloatIsNotAnInteger() {
         let findings = report(#"{"title": "Fix", "priority": "low", "storyPoints": 2.5}"#)
-        XCTAssertEqual(findings.map(\.code), ["type_mismatch"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.typeMismatch])
     }
 
     func testArrayBoundsAreChecked() {
         let findings = report(#"{"title": "Fix", "priority": "low", "labels": []}"#)
-        XCTAssertEqual(findings.map(\.code), ["too_few_items"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.tooFewItems])
         XCTAssertEqual(findings.first?.evidence, "$.labels")
     }
 
@@ -70,10 +70,10 @@ final class SchemaCheckTests: XCTestCase {
 
     func testUnexpectedPropertyOnlyWhenForbidden() {
         let strict = SchemaNode.object(properties: ["a": .string()], required: [], allowAdditional: false)
-        XCTAssertEqual(report(#"{"a": "x", "b": "y"}"#, schema: strict).map(\.code), ["unexpected_property"])
+        XCTAssertEqual(report(#"{"a": "x", "b": "y"}"#, schema: strict).map(\.rule), [RuleCatalog.unexpectedProperty])
 
         let lenient = SchemaNode.object(properties: ["a": .string()])
-        XCTAssertEqual(report(#"{"a": "x", "b": "y"}"#, schema: lenient).map(\.code), ["schema_ok"])
+        XCTAssertEqual(report(#"{"a": "x", "b": "y"}"#, schema: lenient).map(\.rule), [RuleCatalog.schemaOK])
     }
 
     /// Modelle rahmen JSON gern in Fliesstext oder ```json-Zaeune — das ist ein
@@ -86,7 +86,7 @@ final class SchemaCheckTests: XCTestCase {
         ```
         Sag Bescheid, wenn etwas fehlt.
         """
-        XCTAssertEqual(report(output).map(\.code), ["schema_ok"])
+        XCTAssertEqual(report(output).map(\.rule), [RuleCatalog.schemaOK])
     }
 
     func testExtractionCanBeTurnedOff() {
@@ -94,10 +94,10 @@ final class SchemaCheckTests: XCTestCase {
         let findings = strict.inspect(OutputContext(
             output: "Hier: {\"title\": \"Fix\", \"priority\": \"high\"}",
             expectedSchema: ticketSchema))
-        XCTAssertEqual(findings.map(\.code), ["invalid_json"])
+        XCTAssertEqual(findings.map(\.rule), [RuleCatalog.invalidJSON])
     }
 
     func testGarbageIsInvalidJSON() {
-        XCTAssertEqual(report("Tut mir leid, das kann ich nicht.").map(\.code), ["invalid_json"])
+        XCTAssertEqual(report("Tut mir leid, das kann ich nicht.").map(\.rule), [RuleCatalog.invalidJSON])
     }
 }

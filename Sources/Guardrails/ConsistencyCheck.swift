@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 import GuardrailCore
@@ -64,7 +64,7 @@ public struct ConsistencyCheck: GuardrailCheck {
 
     public func inspect(_ context: OutputContext) -> [Finding] {
         candidates(asserted: context.assertedFacts, known: context.knownFacts).map {
-            Finding(check: name, severity: .warning, code: "contradiction_candidate",
+            Finding(check: name, rule: RuleCatalog.contradictionCandidate,
                     message: "Behauptung widerspricht einem bekannten Fakt (deterministisch erkannt, nicht verifiziert).",
                     evidence: "\($0.assertedTriple) ⇄ \($0.knownTriple)")
         }
@@ -108,7 +108,7 @@ public struct LLMConsistencyCheck: AsyncGuardrailCheck {
                       let isContradiction = json["contradiction"] as? Bool,
                       let confidence = json["confidence"] as? Double else {
                     findings.append(Finding(
-                        check: name, severity: .warning, code: "unverifiable",
+                        check: name, rule: RuleCatalog.unverifiable,
                         message: "Modell-Antwort nicht auswertbar — Kandidat bleibt offen.",
                         evidence: "\(candidate.assertedId)|\(candidate.knownId)"))
                     continue
@@ -116,13 +116,13 @@ public struct LLMConsistencyCheck: AsyncGuardrailCheck {
                 guard isContradiction, confidence >= minConfidence else { continue }
                 let explanation = json["explanation"] as? String ?? ""
                 findings.append(Finding(
-                    check: name, severity: .violation, code: "contradiction_confirmed",
+                    check: name, rule: RuleCatalog.contradictionConfirmed,
                     message: "Bestaetigter Widerspruch (Konfidenz \(String(format: "%.2f", confidence))): \(explanation)",
                     evidence: "\(candidate.assertedTriple) ⇄ \(candidate.knownTriple)"))
             } catch {
                 // Ein Modellfehler ist kein „unauffaellig": der Kandidat bleibt offen.
                 findings.append(Finding(
-                    check: name, severity: .warning, code: "verification_failed",
+                    check: name, rule: RuleCatalog.verificationFailed,
                     message: "Verifikation fehlgeschlagen (\(error.localizedDescription)) — Kandidat bleibt offen.",
                     evidence: "\(candidate.assertedId)|\(candidate.knownId)"))
             }

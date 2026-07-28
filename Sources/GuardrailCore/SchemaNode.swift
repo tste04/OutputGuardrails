@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 

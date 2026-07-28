@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Tommy Stellmacher
-// Licensed under the PolyForm Noncommercial License 1.0.0 (see LICENSE.md).
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import Foundation
 import GuardrailCore
@@ -31,18 +31,17 @@ public struct SchemaCheck: GuardrailCheck {
         guard let schema = context.expectedSchema else { return [] }
 
         guard let json = Self.parse(context.output, extractFromProse: extractFromProse) else {
-            return [Finding(check: name, severity: .violation, code: "invalid_json",
+            return [Finding(check: name, rule: RuleCatalog.invalidJSON,
                             message: "Ausgang ist kein gueltiges JSON, obwohl ein Schema erwartet wird.",
                             evidence: nil)]
         }
         let problems = Self.validate(json, against: schema, path: "$")
         if problems.isEmpty {
-            return [Finding(check: name, severity: .info, code: "schema_ok",
+            return [Finding(check: name, rule: RuleCatalog.schemaOK,
                             message: "Ausgang entspricht dem erwarteten Schema.", evidence: nil)]
         }
         return problems.map {
-            Finding(check: name, severity: .violation, code: $0.code,
-                    message: $0.message, evidence: $0.path)
+            Finding(check: name, rule: $0.rule, message: $0.message, evidence: $0.path)
         }
     }
 
@@ -74,7 +73,7 @@ public struct SchemaCheck: GuardrailCheck {
     // MARK: - Validieren
 
     struct Problem {
-        let code: String
+        let rule: RuleID
         let message: String
         let path: String
     }
@@ -87,7 +86,7 @@ public struct SchemaCheck: GuardrailCheck {
         case .string(let enumValues):
             guard let text = value as? String else { return [typeMismatch(path, schema, value)] }
             if let allowed = enumValues, !allowed.contains(text) {
-                return [Problem(code: "enum_mismatch",
+                return [Problem(rule: RuleCatalog.enumMismatch,
                                 message: "Wert liegt ausserhalb der erlaubten Auswahl (\(allowed.joined(separator: ", "))).",
                                 path: path)]
             }
@@ -120,7 +119,7 @@ public struct SchemaCheck: GuardrailCheck {
             guard let dict = value as? [String: Any] else { return [typeMismatch(path, schema, value)] }
             var problems: [Problem] = []
             for key in required.sorted() where dict[key] == nil {
-                problems.append(Problem(code: "missing_required",
+                problems.append(Problem(rule: RuleCatalog.missingRequired,
                                         message: "Pflichtfeld '\(key)' fehlt.",
                                         path: "\(path).\(key)"))
             }
@@ -130,7 +129,7 @@ public struct SchemaCheck: GuardrailCheck {
             }
             if !allowAdditional {
                 for key in dict.keys.sorted() where properties[key] == nil {
-                    problems.append(Problem(code: "unexpected_property",
+                    problems.append(Problem(rule: RuleCatalog.unexpectedProperty,
                                             message: "Feld '\(key)' ist im Schema nicht vorgesehen.",
                                             path: "\(path).\(key)"))
                 }
@@ -141,12 +140,12 @@ public struct SchemaCheck: GuardrailCheck {
             guard let items = value as? [Any] else { return [typeMismatch(path, schema, value)] }
             var problems: [Problem] = []
             if let min = minItems, items.count < min {
-                problems.append(Problem(code: "too_few_items",
+                problems.append(Problem(rule: RuleCatalog.tooFewItems,
                                         message: "Mindestens \(min) Element(e) erwartet, \(items.count) geliefert.",
                                         path: path))
             }
             if let max = maxItems, items.count > max {
-                problems.append(Problem(code: "too_many_items",
+                problems.append(Problem(rule: RuleCatalog.tooManyItems,
                                         message: "Hoechstens \(max) Element(e) erlaubt, \(items.count) geliefert.",
                                         path: path))
             }
@@ -158,7 +157,7 @@ public struct SchemaCheck: GuardrailCheck {
     }
 
     private static func typeMismatch(_ path: String, _ schema: SchemaNode, _ value: Any) -> Problem {
-        Problem(code: "type_mismatch",
+        Problem(rule: RuleCatalog.typeMismatch,
                 message: "Erwartet \(schema.typeName), geliefert \(describe(value)).",
                 path: path)
     }
