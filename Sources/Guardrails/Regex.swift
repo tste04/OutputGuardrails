@@ -38,6 +38,19 @@ enum Regex {
         return regex.firstMatch(in: text, range: range) != nil
     }
 
+    /// Uebersetzte Muster, damit nicht bei jedem Ausgang alles neu gebaut wird.
+    ///
+    /// Die Stufen pruefen mit rund fuenfzig festen Mustern pro Anfrage; ohne
+    /// diesen Zwischenspeicher wurde jedes einzelne davon jedes Mal neu
+    /// uebersetzt. `NSRegularExpression` ist nach dem Bauen unveraenderlich und
+    /// darf geteilt werden — der Deckel liegt nur um den Aufbau.
+    ///
+    /// Ein Sperre statt eines Actors, weil die Stufen bewusst synchron sind:
+    /// „kein Netz, kein Zustand, keine I/O" heisst auch, dass `inspect` nicht
+    /// `await` verlangen darf.
+    private static let cacheLock = NSLock()
+    private static var cache: [String: NSRegularExpression] = [:]
+
     /// Uebersetzt und meldet Fehlschlaege laut, statt sie zu verschlucken.
     ///
     /// Zwei Herkuenfte, zwei Umgangsweisen:
@@ -52,10 +65,23 @@ enum Regex {
     ///   kaputte Datei fuehrt zum Abbruch statt zu einer stillen Luecke.
     private static func compile(_ pattern: String,
                                 _ options: NSRegularExpression.Options) -> NSRegularExpression? {
+        // Die Optionen gehoeren in den Schluessel: dasselbe Muster einmal mit
+        // und einmal ohne `.caseInsensitive` sind zwei verschiedene Ausdruecke.
+        let key = "\(options.rawValue)\u{0}\(pattern)"
+
+        cacheLock.lock()
+        let cached = cache[key]
+        cacheLock.unlock()
+        if let cached { return cached }
+
         guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
             assertionFailure("Nicht uebersetzbares Regex-Muster: \(pattern)")
             return nil
         }
+
+        cacheLock.lock()
+        cache[key] = regex
+        cacheLock.unlock()
         return regex
     }
 }

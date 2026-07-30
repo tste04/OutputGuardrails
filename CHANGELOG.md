@@ -51,6 +51,13 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
 - **`HTTPServer.boundPort`** — macht die Socket-Schicht überhaupt erst testbar
   (Port 0 = freien Port vom System).
 
+### Geändert
+
+- **Übersetzte Regex-Muster werden zwischengespeichert.** Rund fünfzig feste
+  Muster pro Ausgang wurden bisher bei jedem Aufruf neu übersetzt. Am Ergebnis
+  ändert sich nichts (dafür gibt es Tests); gemessen liegt ein vollständiger
+  Durchlauf der Standard-Pipeline bei ~0,6 ms pro Ausgang.
+
 ### Behoben
 
 - **Fail-closed hergestellt, wo die Prüfschicht still nach offen fiel.**
