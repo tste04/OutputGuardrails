@@ -6,3 +6,10 @@ hit	Erika Musterfrau wohnt in der Beispielstraße 12, 10115 Berlin
 pass	Das Meeting ist am Dienstag um 14 Uhr.
 pass	Der Server läuft auf 127.0.0.1 Port 8787.
 pass	Die Bestellnummer lautet ORD-2026-0042.
+hit	Bitte überweisen Sie an DE89 3704 0044 0532 0130 00
+hit	Bitte an Herr Schmidt weiterleiten.
+hit	Ansprechpartner: Weber
+pass	Kurzer Zwischenschritt vor dem Abschluss.
+pass	Offene Punkte werden im Protokoll geführt.
+pass	Technische Schulden wachsen langsam.
+pass	Bestellung AB12 3456 folgt.
