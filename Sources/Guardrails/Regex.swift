@@ -10,10 +10,20 @@ import Foundation
 /// Plattform-Gate.
 enum Regex {
 
+    /// Ob ein Muster ueberhaupt uebersetzbar ist.
+    ///
+    /// Gibt es, damit betreiber-gelieferte Muster **beim Laden der Policy**
+    /// geprueft werden koennen statt erst beim ersten Ausgang. Ein unuebersetz-
+    /// bares Muster trifft nie — bei einer verbotenen Formulierung heisst das:
+    /// sie ist nicht verboten, und niemand erfaehrt davon.
+    public static func isValid(_ pattern: String) -> Bool {
+        (try? NSRegularExpression(pattern: pattern)) != nil
+    }
+
     /// Alle Volltreffer eines Musters.
     static func matches(_ pattern: String, in text: String,
                         options: NSRegularExpression.Options = []) -> [String] {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return [] }
+        guard let regex = compile(pattern, options) else { return [] }
         let range = NSRange(text.startIndex..., in: text)
         return regex.matches(in: text, range: range).compactMap {
             Range($0.range, in: text).map { String(text[$0]) }
@@ -23,8 +33,29 @@ enum Regex {
     /// Ob das Muster mindestens einmal trifft.
     static func hasMatch(_ pattern: String, in text: String,
                          options: NSRegularExpression.Options = []) -> Bool {
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return false }
+        guard let regex = compile(pattern, options) else { return false }
         let range = NSRange(text.startIndex..., in: text)
         return regex.firstMatch(in: text, range: range) != nil
+    }
+
+    /// Uebersetzt und meldet Fehlschlaege laut, statt sie zu verschlucken.
+    ///
+    /// Zwei Herkuenfte, zwei Umgangsweisen:
+    ///
+    /// - **Muster im Code** sind Programmierfehler. `assertionFailure` macht sie
+    ///   im Test und im Debug-Build sofort sichtbar; im Release faellt die Stufe
+    ///   auf „kein Treffer" zurueck, weil ein Absturz der Pruefschicht schlimmer
+    ///   waere als eine fehlende Regel. `RegexCatalogTests` uebersetzt jedes
+    ///   eingebaute Muster, damit es dazu gar nicht erst kommt.
+    /// - **Muster aus der Policy-Datei** gehoeren hier nicht mehr hin: sie
+    ///   werden in `CompliancePolicy.validate()` beim Laden geprueft, und eine
+    ///   kaputte Datei fuehrt zum Abbruch statt zu einer stillen Luecke.
+    private static func compile(_ pattern: String,
+                                _ options: NSRegularExpression.Options) -> NSRegularExpression? {
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+            assertionFailure("Nicht uebersetzbares Regex-Muster: \(pattern)")
+            return nil
+        }
+        return regex
     }
 }

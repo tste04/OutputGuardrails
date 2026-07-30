@@ -40,6 +40,23 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
 
 ### Behoben
 
+- **Fail-closed hergestellt, wo die Prüfschicht still nach offen fiel.**
+  - Ein **nicht übersetzbares Regex-Muster** aus der Policy-Datei bedeutete
+    „kein Treffer": die untersagte Formulierung war nicht untersagt, der
+    Pflichthinweis wurde nie ausgelöst — ohne jede Meldung. `GuardrailConfig.load`
+    prüft die Compliance-Muster jetzt beim Laden und bricht mit dem Feldnamen ab.
+    Muster im Code melden sich über `assertionFailure`, ein Test lässt jede
+    Stufe einmal laufen.
+  - **JSON-Schema wurde unbegrenzt rekursiv geparst.** Beim HTTP-Dienst kommt
+    das Schema aus dem Request: ein paar Kilobyte `{"items":{"items":…}}`
+    genügten, um den Stack zu sprengen und den ganzen Prozess mitzunehmen.
+    Tiefe jetzt auf 64 begrenzt, darüber wird der Teilbaum `.any`.
+  - **Die CLI ignorierte vertippte Flags.** `--configg` oder `--config=x` wurde
+    nicht gefunden, `loadConfig()` fiel auf die Voreinstellung zurück — geprüft
+    wurde mit der Standardpolitik statt mit der des Betreibers, Exit 0.
+    Unbekannte Argumente führen jetzt zu Exit 64 mit der Liste der erlaubten.
+    Ebenso `--port`: ein ungültiger Wert fiel still auf 8790 zurück.
+
 - **`redact()` ließ Denylist-Treffer im Klartext stehen.** Gefunden wurde
   case-insensitiv, ersetzt case-sensitiv: bei „projekt nordlicht" im Text und
   „Projekt Nordlicht" in der Denylist meldete die Stufe einen Regelbruch und

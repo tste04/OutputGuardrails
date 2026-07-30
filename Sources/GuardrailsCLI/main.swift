@@ -76,6 +76,53 @@ func fail(_ message: String, code: Int32 = 64) -> Never {
     exit(code)
 }
 
+// MARK: - Argumente pruefen
+//
+// Warum das sein muss: `value(_:)` sucht das Flag per Gleichheit. Ein
+// vertipptes `--configg` oder ein `--config=policy.json` wird dabei einfach
+// nicht gefunden — und `loadConfig()` faellt auf die Voreinstellung zurueck.
+// Der Aufruf prueft dann mit der Standardpolitik statt mit der des Betreibers
+// und meldet Exit 0. Genau die Sorte Fehler, die niemand bemerkt, weil alles
+// nach Erfolg aussieht. In einem Repo mit Fail-closed als Invariante ist das
+// die falsche Voreinstellung.
+
+/// Flags je Kommando: die mit Wert und die ohne.
+let knownFlags: [String: (withValue: Set<String>, boolean: Set<String>)] = [
+    "check": (["--config", "--input", "--request", "--query", "--schema", "--source"],
+              ["--json", "--quiet"]),
+    "serve": (["--config", "--port"], ["--allow-remote"]),
+    "rules": (["--config"], ["--json"]),
+    "config": (["--config"], []),
+    "selftest": (["--config"], []),
+]
+
+func validateFlags(for command: String) {
+    guard let known = knownFlags[command] else { return }
+    var index = 0
+    while index < args.count {
+        let arg = args[index]
+        guard arg.hasPrefix("-") else { index += 1; continue }
+
+        if let equals = arg.firstIndex(of: "="), arg.hasPrefix("--") {
+            let name = String(arg[arg.startIndex..<equals])
+            let hint = known.withValue.contains(name)
+                ? " — dieses Werkzeug erwartet '\(name) <wert>' mit Leerzeichen"
+                : ""
+            fail("unbekanntes Argument '\(arg)'\(hint)")
+        }
+        if known.withValue.contains(arg) {
+            guard index + 1 < args.count else { fail("'\(arg)' erwartet einen Wert") }
+            index += 2                      // Wert ueberspringen, er darf wie ein Flag aussehen
+            continue
+        }
+        guard known.boolean.contains(arg) else {
+            let all = known.withValue.union(known.boolean).sorted().joined(separator: " ")
+            fail("unbekanntes Argument '\(arg)' fuer '\(command)'. Erlaubt: \(all)")
+        }
+        index += 1
+    }
+}
+
 func loadConfig() -> GuardrailConfig {
     guard let path = value("--config") else { return GuardrailConfig() }
     do {
@@ -188,7 +235,17 @@ func runCheck() -> Never {
 
 func runServe() -> Never {
     let config = loadConfig()
-    let port = UInt16(value("--port") ?? "8790") ?? 8790
+    // Kein stiller Rueckfall: wer '--port 87900' tippt, bekaeme sonst 8790 und
+    // haette einen Dienst auf einem Port, den er nicht gemeint hat.
+    let port: UInt16
+    if let raw = value("--port") {
+        guard let parsed = UInt16(raw), parsed > 0 else {
+            fail("'--port \(raw)' ist keine gueltige Portnummer (1…65535)")
+        }
+        port = parsed
+    } else {
+        port = 8790
+    }
     let loopbackOnly = !has("--allow-remote")
     let http = GuardrailHTTPService(service: GuardrailService(config: config))
 
@@ -282,6 +339,8 @@ func runSelftest() -> Never {
 }
 
 // MARK: - Verteiler
+
+validateFlags(for: command)
 
 switch command {
 case "check": runCheck()

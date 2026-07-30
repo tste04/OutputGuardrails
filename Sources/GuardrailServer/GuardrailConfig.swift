@@ -99,14 +99,23 @@ public struct GuardrailConfig: Codable, Sendable, Equatable {
     }
 
     public static func load(_ data: Data) throws -> GuardrailConfig {
+        let config: GuardrailConfig
         do {
-            return try JSONDecoder().decode(GuardrailConfig.self, from: data)
+            config = try JSONDecoder().decode(GuardrailConfig.self, from: data)
         } catch {
             // Fail-closed: eine kaputte Policy-Datei darf nicht stillschweigend
             // zur Voreinstellung werden. Wer sie schreibt, will etwas anderes
             // als den Default — sonst haette er sie nicht geschrieben.
             throw GuardrailConfigError.invalid(String(describing: error))
         }
+        // Syntaktisch gueltiges JSON reicht nicht: ein Regex-Tippfehler in den
+        // Compliance-Mustern ergibt eine Datei, die laedt, und eine Regel, die
+        // nie greift. Das ist der Fall, den der Betreiber am wenigsten bemerkt.
+        let invalid = config.compliance.invalidPatterns()
+        guard invalid.isEmpty else {
+            throw GuardrailConfigError.invalidPattern(invalid.map { "\($0.field): \($0.pattern)" })
+        }
+        return config
     }
 
     public func encoded() throws -> Data {
@@ -152,10 +161,16 @@ public struct GuardrailConfig: Codable, Sendable, Equatable {
 
 public enum GuardrailConfigError: Error, CustomStringConvertible {
     case invalid(String)
+    /// Muster, die sich nicht uebersetzen lassen — je Eintrag „feld: muster".
+    case invalidPattern([String])
 
     public var description: String {
         switch self {
-        case .invalid(let detail): return "Policy-Datei nicht lesbar: \(detail)"
+        case .invalid(let detail):
+            return "Policy-Datei nicht lesbar: \(detail)"
+        case .invalidPattern(let entries):
+            return "Policy-Datei enthaelt nicht uebersetzbare Muster — diese Regeln "
+                + "wuerden nie greifen:\n" + entries.map { "  \($0)" }.joined(separator: "\n")
         }
     }
 }

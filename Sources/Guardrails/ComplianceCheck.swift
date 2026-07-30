@@ -68,6 +68,32 @@ public struct CompliancePolicy: Sendable, Equatable, Codable {
         self.caseInsensitive = caseInsensitive
     }
 
+    /// Alle Muster dieser Politik, die sich nicht uebersetzen lassen — mit dem
+    /// Feld, in dem sie stehen.
+    ///
+    /// Ein unuebersetzbares Muster trifft nie. Bei `forbiddenPatterns` heisst
+    /// das: die untersagte Formulierung ist nicht untersagt. Bei
+    /// `triggerPatterns`: der Pflichthinweis wird nie ausgeloest. Beides faellt
+    /// nach OFFEN, ohne dass irgendwo etwas gemeldet wuerde — der Betreiber
+    /// haelt eine Regel fuer aktiv, die es nicht ist. Deshalb prueft der
+    /// Ladepfad das einmal beim Start, statt es bei jedem Ausgang zu
+    /// verschlucken.
+    public func invalidPatterns() -> [(field: String, pattern: String)] {
+        var bad: [(String, String)] = []
+        for pattern in forbiddenPatterns where !Regex.isValid(pattern) {
+            bad.append(("compliance.forbiddenPatterns", pattern))
+        }
+        for disclaimer in requiredDisclaimers {
+            for pattern in disclaimer.triggerPatterns where !Regex.isValid(pattern) {
+                bad.append(("compliance.requiredDisclaimers[\(disclaimer.id)].triggerPatterns", pattern))
+            }
+            for pattern in disclaimer.satisfiedByPatterns where !Regex.isValid(pattern) {
+                bad.append(("compliance.requiredDisclaimers[\(disclaimer.id)].satisfiedByPatterns", pattern))
+            }
+        }
+        return bad
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         forbiddenPatterns = try c.decodeIfPresent([String].self, forKey: .forbiddenPatterns) ?? []
