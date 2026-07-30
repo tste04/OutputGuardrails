@@ -38,6 +38,19 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
   über `categories` abwählen — wer einen Begriff in die Denylist schreibt, hat
   die Entscheidung schon getroffen.
 
+### Hinzugefügt
+
+- **Bearer-Token für den HTTP-Dienst** (`--token`, besser `GUARDRAILS_TOKEN` —
+  Argumente stehen in der Prozessliste). Ohne konfiguriertes Token bleibt alles
+  wie bisher offen; das ist für Loopback vertretbar. **`--allow-remote` verlangt
+  jetzt ein Token** und bricht sonst ab: der Prüfdienst sieht genau die Inhalte,
+  die nicht abfließen sollen, und das ohne Anmeldung ins Netz zu hängen darf
+  kein Versehen sein können. `GET /health` bleibt ohne Token erreichbar,
+  antwortet dann aber nur mit `{"status":"ok"}` — welche Regeln unterdrückt
+  sind, ist eine Landkarte der blinden Flecken.
+- **`HTTPServer.boundPort`** — macht die Socket-Schicht überhaupt erst testbar
+  (Port 0 = freien Port vom System).
+
 ### Behoben
 
 - **Fail-closed hergestellt, wo die Prüfschicht still nach offen fiel.**
@@ -69,6 +82,20 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
   Befunden. Eine Suppression genügte, um die Widerspruchsprüfung dauerhaft
   stillzulegen — der Bericht meldete `allow`, weil derselbe Befund später wieder
   herausfiel.
+
+- **Der HTTP-Dienst war gegen langsame und mehrdeutige Anfragen offen.**
+  - **Slow-Drip:** das Timeout galt pro `read()`, nicht pro Anfrage — ein Client,
+    der alle paar Sekunden ein Byte schickt, band seinen Thread beliebig lange;
+    64 solcher Clients legten den Dienst still. Jetzt zusätzlich eine absolute
+    Frist für die ganze Anfrage, plus Sende-Timeout gegen langsame Leser.
+  - **Request Smuggling:** `Transfer-Encoding` wurde ignoriert und stattdessen
+    `Content-Length` geglaubt; ein zweites `Content-Length` überschrieb das
+    erste. Beides ergibt jetzt 400.
+  - **Fail-open bei der Länge:** ein fehlendes oder unlesbares `Content-Length`
+    wurde zu 0 — der Prüfdienst urteilte dann über einen leeren Ausgang, als
+    wäre er geprüft worden. Jetzt 400. Angekündigte Überlänge ergibt 413 statt
+    400 (`reason(413)` war unerreichbarer Code), und der Rumpf wird auf die
+    angekündigte Länge gekürzt, statt bis zu 4 KB Überhang mitzunehmen.
 
 - **Abflusskanäle, die nie geprüft wurden.** `bareURLPattern` war deklariert
   und wurde nirgends benutzt — eine nackte Abfluss-URL lief ungeprüft durch,

@@ -41,7 +41,11 @@ check [OPTIONEN]
 serve [OPTIONEN]
   --port <n>          Port (Default 8790).
   --config <datei>    Policy-Datei.
-  --allow-remote      Nicht nur an 127.0.0.1 binden. Nur hinter einem Proxy.
+  --token <geheim>    Bearer-Token, das Aufrufer mitschicken muessen.
+                      Besser ueber GUARDRAILS_TOKEN — Argumente stehen in der
+                      Prozessliste. Mindestens 16 Zeichen.
+  --allow-remote      Nicht nur an 127.0.0.1 binden. Verlangt ein Token und
+                      gehoert hinter einen Reverse Proxy (es gibt kein TLS).
 
 EXIT-CODES
   0 allow · 1 flag · 2 block · 64 Aufruffehler · 70 interner Fehler
@@ -90,7 +94,7 @@ func fail(_ message: String, code: Int32 = 64) -> Never {
 let knownFlags: [String: (withValue: Set<String>, boolean: Set<String>)] = [
     "check": (["--config", "--input", "--request", "--query", "--schema", "--source"],
               ["--json", "--quiet"]),
-    "serve": (["--config", "--port"], ["--allow-remote"]),
+    "serve": (["--config", "--port", "--token"], ["--allow-remote"]),
     "rules": (["--config"], ["--json"]),
     "config": (["--config"], []),
     "selftest": (["--config"], []),
@@ -247,7 +251,29 @@ func runServe() -> Never {
         port = 8790
     }
     let loopbackOnly = !has("--allow-remote")
-    let http = GuardrailHTTPService(service: GuardrailService(config: config))
+
+    // Token aus dem Flag oder der Umgebung. Die Umgebung ist der bessere Weg:
+    // ein Argument steht in der Prozessliste und damit fuer jeden Nutzer der
+    // Maschine lesbar da.
+    let token = value("--token") ?? ProcessInfo.processInfo.environment["GUARDRAILS_TOKEN"]
+
+    // Fail-closed an der Stelle, an der es am meisten zaehlt: dieser Dienst
+    // sieht genau die Inhalte, die nicht abfliessen sollen. Ihn ohne jede
+    // Anmeldung ins Netz zu haengen, darf kein Versehen sein koennen — bisher
+    // genuegte dafuer ein Flag und es blieb bei einer Warnzeile.
+    if !loopbackOnly, token == nil {
+        fail("""
+        '--allow-remote' ohne Token. Der Pruefdienst sieht die Inhalte, die \
+        nicht abfliessen sollen — er darf nicht ohne Anmeldung im Netz stehen.
+          Token setzen: GUARDRAILS_TOKEN=... guardrails serve --allow-remote
+          Es gibt kein TLS: die Strecke zusaetzlich absichern (Reverse Proxy, WireGuard).
+        """)
+    }
+    if let token, token.count < 16 {
+        fail("Token ist zu kurz (mindestens 16 Zeichen).")
+    }
+
+    let http = GuardrailHTTPService(service: GuardrailService(config: config), token: token)
 
     let server: HTTPServer
     do {
@@ -260,8 +286,11 @@ func runServe() -> Never {
     let host = loopbackOnly ? "127.0.0.1" : "0.0.0.0"
     print("guardrails hoert auf http://\(host):\(port)")
     print("  POST /inspect · GET /rules · GET /health")
+    print(token == nil
+          ? "  ohne Token — nur auf Loopback vertretbar"
+          : "  Bearer-Token verlangt (ausser GET /health)")
     if !loopbackOnly {
-        print("  WARNUNG: nicht auf Loopback gebunden — nur hinter einem Reverse Proxy betreiben.")
+        print("  WARNUNG: nicht auf Loopback gebunden und ohne TLS — nur hinter einem Reverse Proxy betreiben.")
     }
     // Der Server laeuft in eigenen Threads; der Hauptthread haelt den Prozess.
     while true { Thread.sleep(forTimeInterval: 3600) }

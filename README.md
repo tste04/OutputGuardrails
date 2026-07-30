@@ -51,6 +51,10 @@ guardrails check --input antwort.txt --source kontext.md --query "Wann?" --confi
 
 # Als Dienst: POST /inspect · GET /rules · GET /health, gebunden auf 127.0.0.1
 guardrails serve --port 8790 --config policy.json
+
+# Über Loopback hinaus nur mit Token — der Dienst sieht genau die Inhalte,
+# die nicht abfließen sollen. Es gibt kein TLS: Strecke fremd absichern.
+GUARDRAILS_TOKEN=… guardrails serve --allow-remote --config policy.json
 ```
 
 Schwellen, Suppressions und die Compliance-Regeln der Organisation stehen in

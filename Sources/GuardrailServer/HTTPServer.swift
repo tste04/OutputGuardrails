@@ -76,6 +76,18 @@ public final class HTTPServer: @unchecked Sendable {
 
     private var listenFD: Int32 = -1
     private var running = false
+    private var actualPort: UInt16 = 0
+
+    /// Der Port, auf dem tatsaechlich gelauscht wird.
+    ///
+    /// Weicht von `port` ab, wenn 0 uebergeben wurde — dann sucht das System
+    /// einen freien. Genau das braucht ein Test, der die Socket-Schicht wirklich
+    /// anspricht, statt nur den Handler aufzurufen; ohne diese Auskunft blieb
+    /// die Parser- und Annahme-Schicht unpruefbar.
+    public var boundPort: UInt16 {
+        stateLock.lock(); defer { stateLock.unlock() }
+        return actualPort
+    }
     private var activeConnections = 0
     private let stateLock = NSLock()
 
@@ -131,8 +143,22 @@ public final class HTTPServer: @unchecked Sendable {
             throw GuardrailServerError.socket("listen() fehlgeschlagen (errno \(errno))")
         }
 
+        // Bei Port 0 vergibt das System einen freien — den muss der Aufrufer
+        // erfahren koennen.
+        var local = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let queried = withUnsafeMutablePointer(to: &local) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                getsockname(fd, $0, &length) == 0
+            }
+        }
+        let resolved: UInt16 = queried ? local.sin_port.bigEndian : port
+
+        stateLock.lock()
         listenFD = fd
         running = true
+        actualPort = resolved
+        stateLock.unlock()
         // Bewusst STARK gehalten: ein lauschender Server, den niemand mehr
         // referenziert, waere sonst sofort weg — der Socket laege gebunden da
         // und keine Verbindung wuerde je angenommen. Die Schleife endet mit
@@ -186,11 +212,22 @@ public final class HTTPServer: @unchecked Sendable {
             shutdown(fd, Int32(SHUT_RDWR))
             close(fd)
         }
-        var timeout = timeval(tv_sec: time_t(readTimeoutSeconds), tv_usec: 0)
+        // SO_RCVTIMEO begrenzt nur das EINZELNE read(). Ein Client, der alle
+        // paar Sekunden ein Byte schickt, haelt seinen Thread damit beliebig
+        // lange — bei 64 Verbindungen genuegen 64 solcher Clients, um den
+        // Dienst stillzulegen. Deshalb zusaetzlich eine absolute Frist fuer die
+        // ganze Anfrage; das kurze Socket-Timeout sorgt nur dafuer, dass read()
+        // regelmaessig zurueckkommt und die Frist ueberhaupt geprueft wird.
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+        // Auch die Schreibseite darf nicht unbegrenzt haengen (langsamer Leser).
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
 
-        guard let request = readRequest(fd) else {
-            Self.write(fd, status: 400, body: Data(#"{"error":"malformed request"}"#.utf8))
+        let deadline = Date().addingTimeInterval(TimeInterval(readTimeoutSeconds))
+        let outcome = readRequest(fd, deadline: deadline)
+        guard case .ok(let request) = outcome else {
+            let status = outcome.status
+            Self.write(fd, status: status, body: Data("{\"error\":\"\(outcome.reason)\"}".utf8))
             return
         }
 
@@ -207,45 +244,114 @@ public final class HTTPServer: @unchecked Sendable {
         Self.write(fd, status: result.status, body: result.body)
     }
 
-    private func readRequest(_ fd: Int32) -> HTTPRequest? {
+    /// Ergebnis des Einlesens — mit dem Statuscode, der zur Ursache passt.
+    enum ReadOutcome {
+        case ok(HTTPRequest)
+        case malformed(String)
+        case tooLarge
+        case timedOut
+
+        var status: Int {
+            switch self {
+            case .ok: return 200
+            case .malformed: return 400
+            case .tooLarge: return 413
+            case .timedOut: return 408
+            }
+        }
+
+        var reason: String {
+            switch self {
+            case .ok: return "ok"
+            case .malformed(let detail): return "malformed request: \(detail)"
+            case .tooLarge: return "payload too large"
+            case .timedOut: return "request timeout"
+            }
+        }
+    }
+
+    func readRequest(_ fd: Int32, deadline: Date) -> ReadOutcome {
         var buffer = Data()
         var chunk = [UInt8](repeating: 0, count: 4096)
+
+        /// Liest einmal nach; unterscheidet Frist, Abbruch und Fortschritt.
+        func readMore() -> ReadOutcome? {
+            if Date() >= deadline { return .timedOut }
+            let n = read(fd, &chunk, chunk.count)
+            if n > 0 {
+                buffer.append(contentsOf: chunk[0..<n])
+                return nil
+            }
+            // n == -1 mit EAGAIN/EWOULDBLOCK ist der Timeout des Sockets: die
+            // Frist ist noch nicht um, also weiterlesen.
+            if n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK) {
+                return Date() >= deadline ? .timedOut : nil
+            }
+            return .malformed("connection closed")
+        }
 
         // Kopf lesen, bis die Leerzeile kommt — mit Obergrenze, damit ein Client
         // nicht endlos Header schicken kann.
         while buffer.range(of: Data("\r\n\r\n".utf8)) == nil {
-            if buffer.count > 64 * 1024 { return nil }
-            let n = read(fd, &chunk, chunk.count)
-            guard n > 0 else { return nil }
-            buffer.append(contentsOf: chunk[0..<n])
+            if buffer.count > 64 * 1024 { return .malformed("header too large") }
+            if let stop = readMore() { return stop }
         }
         guard let separator = buffer.range(of: Data("\r\n\r\n".utf8)),
               let head = String(data: buffer[buffer.startIndex..<separator.lowerBound], encoding: .utf8)
-        else { return nil }
+        else { return .malformed("undecodable header") }
 
         let lines = head.components(separatedBy: "\r\n")
         let requestLine = lines.first?.components(separatedBy: " ") ?? []
-        guard requestLine.count >= 2 else { return nil }
+        guard requestLine.count >= 2 else { return .malformed("request line") }
 
         var headers: [String: String] = [:]
+        var seen = Set<String>()
         for line in lines.dropFirst() {
             guard let colon = line.firstIndex(of: ":") else { continue }
             let key = line[line.startIndex..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            // Ein zweites Content-Length ist die klassische Schmuggel-Vorlage:
+            // zwei Vermittler lesen unterschiedliche Laengen und zerlegen den
+            // Strom verschieden. Hier gibt es dazu keine Meinung, sondern 400.
+            if key == "content-length", !seen.insert(key).inserted, headers[key] != value {
+                return .malformed("conflicting content-length")
+            }
             headers[key] = value
         }
 
-        var body = Data(buffer[separator.upperBound...])
-        let expected = Int(headers["content-length"] ?? "0") ?? 0
-        if expected > maxBodyBytes { return nil }
-        while body.count < expected {
-            let n = read(fd, &chunk, chunk.count)
-            guard n > 0 else { return nil }
-            body.append(contentsOf: chunk[0..<n])
+        // Transfer-Encoding wird nicht unterstuetzt. Es still zu ignorieren und
+        // stattdessen Content-Length zu glauben, ist genau der Schmuggelpfad.
+        if headers["transfer-encoding"] != nil {
+            return .malformed("transfer-encoding not supported")
         }
 
-        return HTTPRequest(method: requestLine[0], path: requestLine[1],
-                           headers: headers, body: body)
+        var body = Data(buffer[separator.upperBound...])
+        let expected: Int
+        if let raw = headers["content-length"] {
+            // Fail-closed: ein unlesbares Content-Length wurde frueher zu 0, und
+            // der Dienst urteilte dann ueber einen leeren Ausgang, als waere er
+            // geprueft worden.
+            guard let parsed = Int(raw), parsed >= 0 else {
+                return .malformed("content-length")
+            }
+            expected = parsed
+        } else if requestLine[0] == "POST" || requestLine[0] == "PUT" {
+            return .malformed("content-length required")
+        } else {
+            expected = 0
+        }
+        if expected > maxBodyBytes { return .tooLarge }
+
+        while body.count < expected {
+            if let stop = readMore() { return stop }
+            body = Data(buffer[separator.upperBound...])
+        }
+        // Nie mehr weitergeben als angekuendigt — der Ueberhang gehoert zur
+        // naechsten Anfrage und darf nicht in diese hineinlaufen.
+        if body.count > expected { body = body.prefix(expected) }
+
+        return .ok(HTTPRequest(method: requestLine[0], path: requestLine[1],
+                               headers: headers, body: body))
     }
 
     // MARK: - Antwort
