@@ -93,24 +93,45 @@ public struct GroundingCheck: GuardrailCheck {
             return findings
         }
 
-        findings.append(Finding(
-            check: name, rule: RuleCatalog.grounded,
-            message: "Ausgang steht auf \(grounded.count) Beleg(en).",
-            evidence: grounded.map(\.id).joined(separator: ",")))
+        // Die Bestaetigung nur, wenn es wirklich etwas zu bestaetigen gibt.
+        // "Ausgang steht auf 0 Belegen" als Erfolgsmeldung ist eine Aussage,
+        // die niemand so meinen kann.
+        if !grounded.isEmpty {
+            findings.append(Finding(
+                check: name, rule: RuleCatalog.grounded,
+                message: "Ausgang steht auf \(grounded.count) Beleg(en).",
+                evidence: grounded.map(\.id).joined(separator: ",")))
+        }
 
-        guard policy.checkUnbackedClaims else { return findings }
+        // Ohne verwertbaren Kontext ist die Nachpruefung sinnlos: es gaebe
+        // keinen Text, gegen den sich irgendetwas belegen liesse, also waere
+        // JEDE Zahl und JEDER Name unbelegt. Bei requireCitations == true faengt
+        // das der frueher Ausstieg oben ab; ohne die Belegpflicht lief die Stufe
+        // weiter und meldete den ganzen Ausgang Fundstelle fuer Fundstelle.
+        guard policy.checkUnbackedClaims, !grounded.isEmpty else { return findings }
 
         let contextText = grounded.map { "\($0.title) \($0.content)" }.joined(separator: "\n")
         for claim in Self.unbackedClaims(in: context.output, context: contextText, query: context.query) {
             findings.append(Finding(
                 check: name, rule: RuleCatalog.unbackedClaim,
                 message: "Angabe kommt weder im Kontext noch in der Frage vor — als unsicher behandeln.",
-                evidence: claim))
+                evidence: Self.maskedEvidence(claim)))
         }
         return findings
     }
 
     // MARK: - Deterministische Nachpruefung (kein LLM)
+
+    /// Belege duerfen keinen Klartext tragen — und eine unbelegte Namenskette
+    /// IST ein Personenname.
+    ///
+    /// Zahlen bleiben lesbar: eine Jahreszahl oder ein Betrag ist die eigentlich
+    /// nuetzliche Auskunft fuer den, der den Befund liest, und kein
+    /// Personenbezug. Sobald ein Buchstabe vorkommt, wird maskiert.
+    static func maskedEvidence(_ claim: String) -> String {
+        guard claim.contains(where: { $0.isLetter }) else { return claim }
+        return PIIMatch.stars(claim)
+    }
 
     /// Markiert Zahlen (≥ 2 Ziffern) und grossgeschriebene Mehrwort-Namen aus dem
     /// Ausgang, die weder im Kontext noch in der Frage vorkommen. Bewusst

@@ -77,11 +77,16 @@ final class GroundingCheckTests: XCTestCase {
         XCTAssertFalse(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.unbackedClaim })
     }
 
+    /// Der Befund kommt weiterhin — aber ohne den Namen im Klartext. Eine
+    /// unbelegte Namenskette IST ein Personenname, und Befunde wandern in Logs.
     func testNameChainAfterArticleIsStillFlagged() {
         let context = OutputContext(
             output: "Der Anna Beispiel hat zugesagt.", query: "Wer hat zugesagt?",
             sources: [source(id: "e1", content: "Eine Zusage liegt vor.")])
-        XCTAssertTrue(GroundingCheck().inspect(context).contains { $0.evidence == "Anna Beispiel" })
+        let findings = GroundingCheck().inspect(context)
+        XCTAssertTrue(findings.contains { $0.rule == RuleCatalog.unbackedClaim })
+        XCTAssertFalse(findings.contains { $0.evidence?.contains("Beispiel") ?? false },
+                       "Klarname im Befund")
     }
 
     func testCompletelyUnknownNameChainIsFlagged() {
@@ -89,7 +94,8 @@ final class GroundingCheckTests: XCTestCase {
             output: "Anna Beispiel hat zugesagt.", query: "Wer hat zugesagt?",
             sources: [source(id: "e1", content: "Eine Zusage liegt vor.")])
         let findings = GroundingCheck().inspect(context)
-        XCTAssertTrue(findings.contains { $0.evidence == "Anna Beispiel" })
+        XCTAssertTrue(findings.contains { $0.rule == RuleCatalog.unbackedClaim })
+        XCTAssertFalse(findings.contains { $0.evidence?.contains("Beispiel") ?? false })
     }
 
     func testNameChainWithKnownWordIsNotFlagged() {
@@ -103,5 +109,50 @@ final class GroundingCheckTests: XCTestCase {
         let policy = GroundingPolicy(requireCitations: false, checkUnbackedClaims: false)
         let findings = GroundingCheck(policy: policy).inspect(OutputContext(output: "Hallo"))
         XCTAssertTrue(findings.filter { $0.severity > .info }.isEmpty)
+    }
+}
+
+/// Zwei Eigenschaften, die der Stufe fehlten: Befunde ohne Klartext, und keine
+/// Befundflut, wenn es gar keinen Kontext gibt.
+final class GroundingEvidenceTests: XCTestCase {
+
+    private func source(id: String, content: String) -> GroundingSource {
+        GroundingSource(id: id, sourceType: "note", title: "", content: content)
+    }
+
+    /// Zahlen sind die eigentlich nuetzliche Auskunft fuer den, der den Befund
+    /// liest — und kein Personenbezug. Sie bleiben lesbar.
+    func testNumbersStayReadable() {
+        let context = OutputContext(
+            output: "Das Budget liegt bei 4200 Euro.", query: "Wie hoch?",
+            sources: [source(id: "e1", content: "Ein Budget wurde genannt.")])
+        XCTAssertTrue(GroundingCheck().inspect(context).contains { $0.evidence == "4200" })
+    }
+
+    /// Ohne verwertbaren Kontext waere JEDE Zahl und JEDER Name unbelegt. Bei
+    /// aktiver Belegpflicht faengt das der fruehe Ausstieg ab; ohne sie lief die
+    /// Stufe weiter und meldete den ganzen Ausgang Fundstelle fuer Fundstelle.
+    func testNoClaimFloodWithoutAnyContext() {
+        let policy = GroundingPolicy(requireCitations: false, checkUnbackedClaims: true)
+        let findings = GroundingCheck(policy: policy).inspect(OutputContext(
+            output: "Anna Beispiel zahlte 4200 Euro am 12.03.2026 an Max Mustermann."))
+        XCTAssertTrue(findings.filter { $0.rule == RuleCatalog.unbackedClaim }.isEmpty,
+                      "\(findings.count) Befunde ohne jeden Kontext")
+    }
+
+    /// „Ausgang steht auf 0 Belegen" als Erfolgsmeldung ist eine Aussage, die
+    /// niemand so meinen kann.
+    func testNoConfirmationWithoutSources() {
+        let policy = GroundingPolicy(requireCitations: false, checkUnbackedClaims: false)
+        let findings = GroundingCheck(policy: policy).inspect(OutputContext(output: "Hallo"))
+        XCTAssertFalse(findings.contains { $0.rule == RuleCatalog.grounded })
+        XCTAssertTrue(findings.filter { $0.severity > .info }.isEmpty)
+    }
+
+    func testConfirmationStillAppearsWithRealSources() {
+        let context = OutputContext(
+            output: "Der Start ist im Mai.", query: "Wann?",
+            sources: [source(id: "e1", content: "Der Start ist im Mai.")])
+        XCTAssertTrue(GroundingCheck().inspect(context).contains { $0.rule == RuleCatalog.grounded })
     }
 }

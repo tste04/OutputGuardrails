@@ -83,6 +83,17 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
   stillzulegen — der Bericht meldete `allow`, weil derselbe Befund später wieder
   herausfiel.
 
+- **Grounding-Befunde trugen Personennamen im Klartext.** Eine unbelegte
+  Namenskette *ist* ein Personenname, und `evidence` wandert in Logs und Audit —
+  die Invariante „Befunde tragen keinen Klartext" galt für PII, nicht hier.
+  Namen werden jetzt maskiert; Zahlen bleiben lesbar, weil sie die eigentlich
+  nützliche Auskunft sind und keinen Personenbezug tragen.
+- **Ohne Kontext meldete die Stufe den ganzen Ausgang Fundstelle für
+  Fundstelle.** Bei aktiver Belegpflicht fing das der frühe Ausstieg ab; mit
+  `requireCitations: false` lief sie weiter, und da es keinen Text gab, gegen den
+  sich etwas belegen ließe, war *jede* Zahl und *jeder* Name unbelegt. Ebenso
+  entfällt die Bestätigung „Ausgang steht auf 0 Belegen".
+
 - **Der HTTP-Dienst war gegen langsame und mehrdeutige Anfragen offen.**
   - **Slow-Drip:** das Timeout galt pro `read()`, nicht pro Anfrage — ein Client,
     der alle paar Sekunden ein Byte schickt, band seinen Thread beliebig lange;
