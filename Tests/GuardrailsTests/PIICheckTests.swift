@@ -149,11 +149,27 @@ final class PIICheckTests: XCTestCase {
         XCTAssertTrue(check.detect(in: "Das Meeting läuft.").isEmpty)
     }
 
+    /// Ein Denylist-Treffer ist kein Personenname — "Projekt Nordlicht" ist ein
+    /// Vorhaben. Eigene Kategorie, damit Auswertungen ueber Personen-Befunde
+    /// nicht von Betreiber-Begriffen verwaessert werden.
     func testDenylistTermCounts() {
         let check = PIICheck(categories: [.mail], denylist: ["Projekt Nordlicht"])
         let matches = check.detect(in: "Wir starten projekt nordlicht im Herbst.")
         XCTAssertEqual(matches.count, 1)
-        XCTAssertEqual(matches.first?.category, .person)
+        XCTAssertEqual(matches.first?.category, .custom)
+        XCTAssertEqual(matches.first?.category.rule, RuleCatalog.piiCustom)
+    }
+
+    /// Die Denylist greift unabhaengig von `categories` — wer einen Begriff
+    /// hineinschreibt, hat die Entscheidung schon getroffen.
+    func testDenylistRedactionCoversEverySpelling() {
+        let check = PIICheck(categories: [.mail], denylist: ["Projekt Nordlicht"])
+        for text in ["Projekt Nordlicht startet.", "projekt nordlicht startet.",
+                     "PROJEKT NORDLICHT startet.",
+                     "Projekt Nordlicht und projekt nordlicht."] {
+            XCTAssertFalse(check.redact(text).lowercased().contains("nordlicht"),
+                           "Klartext blieb stehen: \(check.redact(text))")
+        }
     }
 
     /// Befunde wandern in Logs und Audit — dort darf der Klarwert nicht stehen.

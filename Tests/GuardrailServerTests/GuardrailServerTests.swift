@@ -24,7 +24,7 @@ final class GuardrailConfigTests: XCTestCase {
 
     func testSuppressionsAreRead() throws {
         let config = try GuardrailConfig.load(
-            Data(#"{"policy":{"suppressedRules":["GRO-002","PII-005"]}}"#.utf8))
+            Data(#"{"policy":{"suppressedRules":["GRO-002","PII-001"]}}"#.utf8))
         XCTAssertEqual(config.policy.suppressedRules, [RuleCatalog.unbackedClaim, RuleCatalog.piiPerson])
     }
 
@@ -171,7 +171,7 @@ final class GuardrailServiceTests: XCTestCase {
          "sources":[{"id":"e1","sourceType":"note","content":"x"}]}
         """)
         let findings = body["findings"] as? [[String: Any]] ?? []
-        XCTAssertTrue(findings.contains { $0["rule"] as? String == "PII-003" })
+        XCTAssertTrue(findings.contains { $0["rule"] as? String == "PII-004" })
         XCTAssertTrue(findings.contains { $0["category"] as? String == "pii" })
         XCTAssertEqual(body["verdict"] as? String, "block")
     }
@@ -185,7 +185,7 @@ final class GuardrailServiceTests: XCTestCase {
         """)
         let encoded = String(data: GuardrailService.encode(body), encoding: .utf8) ?? ""
         XCTAssertFalse(encoded.contains("max.mustermann"))
-        XCTAssertTrue(encoded.contains("PII-001"))
+        XCTAssertTrue(encoded.contains("PII-002"))
     }
 
     func testSchemaFromRequestIsApplied() async {

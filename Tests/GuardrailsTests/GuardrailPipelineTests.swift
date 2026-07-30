@@ -122,7 +122,7 @@ final class GuardrailPipelineTests: XCTestCase {
         let report = GuardrailPipeline(checks: [PIICheck()])
             .inspect(OutputContext(output: "Mail an max.mustermann@example.com"))
         XCTAssertTrue(report.auditLine.contains("verdict=block"))
-        XCTAssertTrue(report.auditLine.contains("PII-001"))
+        XCTAssertTrue(report.auditLine.contains("PII-002"))
         XCTAssertFalse(report.auditLine.contains("max.mustermann"))
     }
 }
