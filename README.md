@@ -140,7 +140,12 @@ blockt:
 |---|---|---|---|
 | `.standard` | Regelbruch | Warnung | Normalfall mit Mensch im Spiel |
 | `.strict` | Warnung | Info | Ausgänge, die ohne Mensch weitergehen (Auto-Execute) |
-| `.observeOnly` | Regelbruch | Info | Beobachtungsbetrieb beim Einführen |
+| `.observeOnly` | **nie** (`blocksOutput: false`) | Info | Beobachtungsbetrieb beim Einführen |
+
+`blocksOutput` deckelt das Urteil bei `flag`. Es gibt das Feld, weil `Severity`
+keinen Wert oberhalb von `violation` kennt — über `blockAt` allein lässt sich
+„blockt nie" nicht ausdrücken. In der Policy-Datei ist es optional und
+voreingestellt `true`; bestehende Dateien blocken unverändert.
 
 Der Bericht trägt zusätzlich `riskScore` (Summe der Regelgewichte, gedeckelt auf
 1.0) und `requiresApproval` — das Signal für die Risk-based-Approval-Stufe

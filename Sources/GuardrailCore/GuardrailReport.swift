@@ -35,15 +35,21 @@ public struct GuardrailPolicy: Sendable, Equatable, Codable {
     /// Regeln, die nicht ins Urteil eingehen. Sie bleiben im Bericht sichtbar
     /// (unter `suppressed`) — unterdrueckt heisst nicht unsichtbar.
     public var suppressedRules: Set<RuleID>
+    /// Ob diese Politik ueberhaupt blocken darf. `false` deckelt das Urteil bei
+    /// `.flag` — der Beobachtungsbetrieb braucht das, weil `Severity` keinen
+    /// Wert oberhalb von `.violation` kennt und `blockAt` deshalb nie so hoch
+    /// gesetzt werden kann, dass nichts mehr blockt.
+    public var blocksOutput: Bool
 
     public init(blockAt: Severity = .violation, flagAt: Severity = .warning,
                 reportSkippedChecks: Bool = true, approvalThreshold: Double = 0.30,
-                suppressedRules: Set<RuleID> = []) {
+                suppressedRules: Set<RuleID> = [], blocksOutput: Bool = true) {
         self.blockAt = blockAt
         self.flagAt = flagAt
         self.reportSkippedChecks = reportSkippedChecks
         self.approvalThreshold = approvalThreshold
         self.suppressedRules = suppressedRules
+        self.blocksOutput = blocksOutput
     }
 
     /// Jedes Feld ist optional: wer nur `approvalThreshold` aendern will, soll
@@ -60,6 +66,8 @@ public struct GuardrailPolicy: Sendable, Equatable, Codable {
             ?? fallback.approvalThreshold
         suppressedRules = try c.decodeIfPresent(Set<RuleID>.self, forKey: .suppressedRules)
             ?? fallback.suppressedRules
+        blocksOutput = try c.decodeIfPresent(Bool.self, forKey: .blocksOutput)
+            ?? fallback.blocksOutput
     }
 
     /// Blockt bei Regelbruch, markiert bei Warnung.
@@ -71,8 +79,15 @@ public struct GuardrailPolicy: Sendable, Equatable, Codable {
                                                approvalThreshold: 0.10)
 
     /// Blockt nie, meldet nur. Fuer Beobachtungsbetrieb beim Einfuehren.
+    ///
+    /// `blocksOutput: false` ist der Kern der Zusage — ohne das blockte diese
+    /// Politik jeden Regelbruch wie `.standard`, und genau dafuer wird sie
+    /// eingesetzt: um die Guardrails scharfzuschalten, ohne den Betrieb
+    /// anzuhalten. `approvalThreshold: 1.01` haelt zusaetzlich das
+    /// Freigabe-Flag unten, damit die Beobachtung nichts anhaelt.
     public static let observeOnly = GuardrailPolicy(blockAt: .violation, flagAt: .info,
-                                                    approvalThreshold: 1.01)
+                                                    approvalThreshold: 1.01,
+                                                    blocksOutput: false)
 }
 
 /// Gesamtergebnis eines Guardrail-Durchlaufs.
@@ -152,7 +167,7 @@ public struct GuardrailReport: Sendable, Equatable {
     /// Leitet aus Befunden und Politik das Urteil ab.
     public static func verdict(for findings: [Finding], policy: GuardrailPolicy) -> Verdict {
         guard let worst = findings.map(\.severity).max() else { return .allow }
-        if worst >= policy.blockAt { return .block }
+        if worst >= policy.blockAt { return policy.blocksOutput ? .block : .flag }
         if worst >= policy.flagAt { return .flag }
         return .allow
     }

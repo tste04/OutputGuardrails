@@ -108,6 +108,30 @@ final class VerdictTests: XCTestCase {
         XCTAssertEqual(GuardrailReport.verdict(for: [finding(RuleCatalog.grounded)],
                                                policy: .observeOnly), .flag)
     }
+
+    /// Der Beobachtungsbetrieb wird eingesetzt, um die Guardrails
+    /// scharfzuschalten, ohne den Betrieb anzuhalten. Blockte er bei
+    /// Regelbruch, waere er ununterscheidbar von `.standard`.
+    func testObserveOnlyNeverBlocks() {
+        let violation = [finding(RuleCatalog.noGrounding)]
+        XCTAssertEqual(GuardrailReport.verdict(for: violation, policy: .observeOnly), .flag)
+        XCTAssertEqual(GuardrailReport.verdict(for: violation, policy: .standard), .block)
+
+        let report = GuardrailReport.make(findings: violation, policy: .observeOnly)
+        XCTAssertEqual(report.verdict, .flag)
+        XCTAssertFalse(report.findings.isEmpty, "beobachten heisst melden, nicht schweigen")
+        XCTAssertGreaterThan(report.riskScore, 0)
+    }
+
+    /// Bestehende Policy-Dateien kennen `blocksOutput` nicht — sie muessen
+    /// weiter blocken.
+    func testPolicyFileWithoutBlocksOutputStillBlocks() throws {
+        let policy = try JSONDecoder().decode(
+            GuardrailPolicy.self, from: Data(#"{"blockAt":"violation"}"#.utf8))
+        XCTAssertTrue(policy.blocksOutput)
+        XCTAssertEqual(GuardrailReport.verdict(for: [finding(RuleCatalog.noGrounding)],
+                                               policy: policy), .block)
+    }
 }
 
 final class RiskScoreTests: XCTestCase {
