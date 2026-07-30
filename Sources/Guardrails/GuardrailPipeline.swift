@@ -90,7 +90,13 @@ public struct GuardrailPipeline: Sendable {
         var findings = checks.flatMap { $0.inspect(context) }
         var skipped: [String] = []
 
-        let alreadyBlocked = GuardrailReport.verdict(for: findings, policy: policy) == .block
+        // Auf den WIRKSAMEN Befunden rechnen, nicht auf den rohen: eine
+        // unterdrueckte Regel hat kein Gewicht im Urteil und darf deshalb auch
+        // die LLM-Stufe nicht abschalten. Vorher genuegte eine Suppression, um
+        // die teuerste Pruefung dauerhaft stillzulegen — und der Bericht meldete
+        // hinterher `allow`, weil derselbe Befund in `make` wieder herausfiel.
+        let effective = findings.filter { !policy.suppressedRules.contains($0.rule) }
+        let alreadyBlocked = GuardrailReport.verdict(for: effective, policy: policy) == .block
         let ready = await llm?.isReady() ?? false
 
         if let llm, ready, !alreadyBlocked {

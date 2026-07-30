@@ -34,6 +34,24 @@ public struct RuleID: Hashable, Sendable, Codable, CustomStringConvertible, Expr
     }
 
     public var description: String { rawValue }
+
+    /// Die 9xx-Reihe jeder Familie: Bestaetigungen, dass etwas in Ordnung ist
+    /// (`GRO-900` „steht auf Belegen", `SCH-900` „entspricht dem Schema").
+    ///
+    /// Sie wiegen 0 und duerfen das Urteil nicht anheben. Ohne diese
+    /// Unterscheidung machte unter `.strict` (flagAt: .info) ausgerechnet der
+    /// SAUBERE Ausgang einen `flag` auf — die Politik fuer Ausgaenge, die ohne
+    /// Menschen weitergehen sollen, verlangte also fuer jeden einwandfreien
+    /// Ausgang eine Freigabe.
+    ///
+    /// `OPS-001` („Pruefstufe nicht ausgefuehrt") gehoert bewusst NICHT dazu:
+    /// eine uebersprungene Pruefung ist keine Bestaetigung, und unter `.strict`
+    /// soll sie sehr wohl auffallen.
+    public var isPositiveConfirmation: Bool {
+        guard let dash = rawValue.lastIndex(of: "-"),
+              let number = Int(rawValue[rawValue.index(after: dash)...]) else { return false }
+        return number >= 900
+    }
 }
 
 /// Fachliche Einordnung eines Befunds. Entspricht den Punkten der Zielbild-Box.

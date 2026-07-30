@@ -188,3 +188,59 @@ final class ModernSecretFormatTests: XCTestCase {
             OutputContext(output: "Der Ablauf ist gut-dokumentiert-und-nachvollziehbar.")).isEmpty)
     }
 }
+
+/// Eine unterdrueckte Regel hat kein Gewicht im Urteil — und darf deshalb auch
+/// die teuerste Pruefstufe nicht abschalten.
+///
+/// Der Kurzschluss „bereits deterministisch blockiert, Modell sparen" rechnete
+/// auf den ROHEN Befunden. Eine Suppression genuegte damit, die LLM-Stufe
+/// dauerhaft stillzulegen: der unterdrueckte Befund loeste den Kurzschluss aus,
+/// fiel im Bericht aber wieder heraus — Ergebnis `allow`, obwohl die
+/// Widerspruchspruefung nie gelaufen war.
+final class SuppressionDoesNotDisableTheModelTests: XCTestCase {
+
+    private final class Counter: @unchecked Sendable { var calls = 0 }
+
+    private struct CountingLLM: GuardrailLLM {
+        let counter: Counter
+        func isReady() async -> Bool { true }
+        func send(system: String, user: String, maxTokens: Int?) async throws -> String {
+            counter.calls += 1
+            return "JA"
+        }
+    }
+
+    private var contradiction: OutputContext {
+        OutputContext(
+            output: "Herr Schmidt bestaetigt: Max arbeitet bei Firma B.",
+            knownFacts: [FactTriple(id: "k1", subject: "Max",
+                                    predicate: "arbeitet_bei", object: "Firma A")],
+            assertedFacts: [FactTriple(id: "a1", subject: "Max",
+                                       predicate: "arbeitet_bei", object: "Firma B")])
+    }
+
+    func testSuppressedRuleStillLetsTheModelRun() async {
+        let counter = Counter()
+        let pipeline = GuardrailPipeline(
+            checks: [PIICheck()], asyncChecks: [LLMConsistencyCheck()],
+            policy: GuardrailPolicy(suppressedRules: [RuleCatalog.piiPerson]))
+
+        let report = await pipeline.inspect(contradiction, llm: CountingLLM(counter: counter))
+
+        XCTAssertEqual(counter.calls, 1, "die unterdrueckte Regel hat das Modell abgeschaltet")
+        XCTAssertTrue(report.skippedChecks.isEmpty)
+    }
+
+    /// Ohne Suppression bleibt der Kurzschluss erhalten — er spart echtes Geld.
+    func testGenuineBlockStillSavesTheModel() async {
+        let counter = Counter()
+        let pipeline = GuardrailPipeline(
+            checks: [PIICheck()], asyncChecks: [LLMConsistencyCheck()])
+
+        let report = await pipeline.inspect(contradiction, llm: CountingLLM(counter: counter))
+
+        XCTAssertEqual(report.verdict, .block)
+        XCTAssertEqual(counter.calls, 0, "geblockter Ausgang darf kein Modell mehr kosten")
+        XCTAssertEqual(report.skippedChecks, ["consistency_llm"])
+    }
+}

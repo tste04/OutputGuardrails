@@ -57,6 +57,19 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
     Unbekannte Argumente führen jetzt zu Exit 64 mit der Liste der erlaubten.
     Ebenso `--port`: ein ungültiger Wert fiel still auf 8790 zurück.
 
+- **Bestätigungen der 9xx-Reihe hoben das Urteil an.** Die Invariante lautet
+  „ein ‚alles in Ordnung' darf niemals Risiko erzeugen" — sie galt für den
+  Risikowert, nicht für das Verdikt. Unter `.strict` (flagAt: `info`) machte
+  deshalb ausgerechnet der **saubere** Ausgang einen `flag` auf: die Politik
+  für Ausgänge, die ohne Menschen weitergehen sollen, verlangte für jeden
+  einwandfreien Ausgang eine Freigabe. `OPS-001` („Prüfstufe nicht ausgeführt")
+  zählt bewusst nicht dazu und flaggt weiterhin.
+- **Eine unterdrückte Regel schaltete die LLM-Stufe ab.** Der Kurzschluss
+  „bereits blockiert, Modell sparen" rechnete auf den rohen statt den wirksamen
+  Befunden. Eine Suppression genügte, um die Widerspruchsprüfung dauerhaft
+  stillzulegen — der Bericht meldete `allow`, weil derselbe Befund später wieder
+  herausfiel.
+
 - **Abflusskanäle, die nie geprüft wurden.** `bareURLPattern` war deklariert
   und wurde nirgends benutzt — eine nackte Abfluss-URL lief ungeprüft durch,
   obwohl sie der einfachste Kanal überhaupt ist. HTML-`<img>` fehlte ganz,

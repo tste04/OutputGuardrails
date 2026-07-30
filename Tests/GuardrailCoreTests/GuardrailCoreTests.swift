@@ -104,9 +104,39 @@ final class VerdictTests: XCTestCase {
                                                policy: .strict), .block)
     }
 
-    func testObserveOnlyStillFlagsInfo() {
-        XCTAssertEqual(GuardrailReport.verdict(for: [finding(RuleCatalog.grounded)],
+    /// Eine uebersprungene Stufe ist Information, die auffallen soll — unter
+    /// `.strict` und `.observeOnly` (flagAt: .info) erzeugt sie einen `flag`.
+    func testObserveOnlyFlagsOperationalInfo() {
+        XCTAssertEqual(GuardrailReport.verdict(for: [finding(RuleCatalog.checkSkipped)],
                                                policy: .observeOnly), .flag)
+        XCTAssertEqual(GuardrailReport.verdict(for: [finding(RuleCatalog.checkSkipped)],
+                                               policy: .strict), .flag)
+    }
+
+    /// Die 9xx-Reihe bestaetigt, dass etwas in Ordnung ist. Sie darf das Urteil
+    /// nicht anheben — sonst macht unter `.strict` (flagAt: .info) ausgerechnet
+    /// der SAUBERE Ausgang einen `flag` auf, und die Politik fuer Ausgaenge, die
+    /// ohne Menschen weitergehen sollen, verlangt fuer jeden einwandfreien
+    /// Ausgang eine Freigabe.
+    func testPositiveConfirmationsNeverRaiseTheVerdict() {
+        let clean = [finding(RuleCatalog.grounded), finding(RuleCatalog.schemaOK)]
+        for policy in [GuardrailPolicy.standard, .strict, .observeOnly] {
+            XCTAssertEqual(GuardrailReport.verdict(for: clean, policy: policy), .allow)
+            XCTAssertFalse(GuardrailReport.make(findings: clean, policy: policy).requiresApproval)
+        }
+        // Neben einem echten Befund aendert die Bestaetigung nichts.
+        XCTAssertEqual(
+            GuardrailReport.verdict(for: clean + [finding(RuleCatalog.noGrounding)],
+                                    policy: .standard), .block)
+    }
+
+    func testPositiveConfirmationIsRecognisedByNumber() {
+        XCTAssertTrue(RuleCatalog.grounded.isPositiveConfirmation)
+        XCTAssertTrue(RuleCatalog.schemaOK.isPositiveConfirmation)
+        // Betrieblich, keine Bestaetigung.
+        XCTAssertFalse(RuleCatalog.checkSkipped.isPositiveConfirmation)
+        XCTAssertFalse(RuleCatalog.noGrounding.isPositiveConfirmation)
+        XCTAssertFalse(RuleID("PII-001").isPositiveConfirmation)
     }
 
     /// Der Beobachtungsbetrieb wird eingesetzt, um die Guardrails

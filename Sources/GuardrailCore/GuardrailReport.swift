@@ -166,7 +166,11 @@ public struct GuardrailReport: Sendable, Equatable {
 
     /// Leitet aus Befunden und Politik das Urteil ab.
     public static func verdict(for findings: [Finding], policy: GuardrailPolicy) -> Verdict {
-        guard let worst = findings.map(\.severity).max() else { return .allow }
+        // Bestaetigungen der 9xx-Reihe bleiben aussen vor: „alles in Ordnung"
+        // darf weder Risiko erzeugen noch das Urteil anheben. Sonst macht unter
+        // `.strict` (flagAt: .info) der saubere Ausgang einen `flag` auf.
+        let deciding = findings.filter { !$0.rule.isPositiveConfirmation }
+        guard let worst = deciding.map(\.severity).max() else { return .allow }
         if worst >= policy.blockAt { return policy.blocksOutput ? .block : .flag }
         if worst >= policy.flagAt { return .flag }
         return .allow
