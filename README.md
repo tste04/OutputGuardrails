@@ -79,7 +79,10 @@ die Andockstelle für den Feedback-Loop des Zielbilds.
   Anrede, einen Feldbezeichner oder einen bekannten Vornamen. Großschreibung
   allein trägt im Deutschen nichts — dort steht jedes Substantiv groß, „Kurzer
   Zwischenschritt" ist keine Person. Eigene Namen ergänzt man über
-  `PIICheck(additionalFirstNames:)`.
+  `PIICheck(additionalFirstNames:)`; wer die alte weite Erkennung braucht
+  (englische Ausgänge), setzt `personDetection: .anyCapitalizedChain`. Beides
+  sind Code-Optionen, keine Policy-Felder — die Policy entscheidet über
+  Schwellen, nicht über Erkennung.
 
 ## Schnellstart
 

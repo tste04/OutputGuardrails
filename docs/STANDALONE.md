@@ -127,7 +127,12 @@ guardrails config > policy.json     # Voreinstellung als Ausgangspunkt
 ```
 
 Jedes Feld ist optional — eine Datei mit `{}` ergibt die Voreinstellung, und wer
-nur eine Schwelle ändern will, schreibt nur diese:
+nur eine Schwelle ändern will, schreibt nur diese.
+
+`blocksOutput` (Vorgabe `true`) deckelt das Urteil bei `flag`: mit `false` meldet
+der Dienst weiter alles, blockt aber nie. Das ist der Beobachtungsbetrieb beim
+Einführen — über `blockAt` allein wäre er nicht ausdrückbar, weil `Severity` bei
+`violation` endet.
 
 ```json
 {
@@ -136,6 +141,7 @@ nur eine Schwelle ändern will, schreibt nur diese:
     "flagAt": "warning",
     "approvalThreshold": 0.30,
     "reportSkippedChecks": true,
+    "blocksOutput": true,
     "suppressedRules": ["GRO-002"]
   },
   "grounding": { "minScore": 0.001, "requireCitations": true, "checkUnbackedClaims": true },

@@ -37,6 +37,9 @@ public enum RuleCatalog {
     public static let secretSlackToken: RuleID = "SEC-004"
     public static let secretJWT: RuleID = "SEC-005"
     public static let secretAPIKey: RuleID = "SEC-006"
+    public static let secretGitLabToken: RuleID = "SEC-007"
+    public static let secretGoogleAPIKey: RuleID = "SEC-008"
+    public static let secretStripeKey: RuleID = "SEC-009"
 
     // MARK: Abfluss und Echo (EXF)
 
@@ -107,6 +110,12 @@ public enum RuleCatalog {
              title: "Slack-Token im Ausgang"),
         Rule(id: secretJWT, category: .secret, severity: .violation, weight: 0.70,
              title: "JWT im Ausgang"),
+        Rule(id: secretGitLabToken, category: .secret, severity: .violation, weight: 1.0,
+             title: "GitLab-Token im Ausgang"),
+        Rule(id: secretGoogleAPIKey, category: .secret, severity: .violation, weight: 1.0,
+             title: "Google-API-Schluessel im Ausgang"),
+        Rule(id: secretStripeKey, category: .secret, severity: .violation, weight: 1.0,
+             title: "Stripe-Schluessel im Ausgang"),
         Rule(id: secretAPIKey, category: .secret, severity: .violation, weight: 0.90,
              title: "API-Schluessel im Ausgang"),
 

@@ -27,9 +27,11 @@ Ergänzend, nicht aus der Box, aber aus Engram mitgebracht:
 |---|---|---|---|
 | Widerspruchsprüfung | `ConsistencyCheck` (deterministisch) + `LLMConsistencyCheck` (bestätigt) | `CON-001`…`CON-004` | Engram `Engines/ContradictionDetector.swift` |
 
-Ein Test hält das fest: `harness`/`GuardrailPipelineTests` prüfen, dass ein
-Ausgang mit je einem Verstoß pro Kategorie in **jeder** Kategorie außer
-`operational` einen Befund erzeugt.
+Ein Test hält das fest: `ZielbildCoverageTests` prüft, dass ein Ausgang mit je
+einem Verstoß pro Kategorie unter `standard()` in **jeder** Kategorie außer
+`operational` einen Befund erzeugt. Der Fall trägt ein erwartetes Schema mit —
+ohne eines kann `SchemaCheck` nichts melden, und die Zusage gilt genau für einen
+Ausgang, an den eine Strukturzusage gestellt wird.
 
 ## Die Nachbarn im Zielbild
 
@@ -42,7 +44,7 @@ liefert:
 | **Risk-based Approval** — „Low Risk → Auto-Execute, High Risk → Human Approval" | ein Risikosignal, keine Prosa | `verdict`, `riskScore` (0…1), `requiresApproval` |
 | **Action Layer** | Gewissheit über die Struktur | `SchemaCheck` vor der Ausführung |
 | **Audit • Metrics • FinOps • Evaluation** | maschinenlesbare, stabile Kennungen ohne Nutzinhalt | `auditLine` und der JSON-Bericht mit `RuleID`s |
-| **Feedback Loop** — „Eval-Daten tunen Router & Guardrails" | Schwellen ohne Neubau änderbar | Policy-Datei: `blockAt`, `flagAt`, `approvalThreshold`, `suppressedRules` |
+| **Feedback Loop** — „Eval-Daten tunen Router & Guardrails" | Schwellen ohne Neubau änderbar | Policy-Datei: `blockAt`, `flagAt`, `approvalThreshold`, `blocksOutput`, `suppressedRules` |
 
 Der Schnitt beim `lightweight()`-Satz folgt dem, was sich nicht zurückholen
 lässt: PII, Zugangsdaten, Abfluss-URLs und Schema werden **pro Turn** geprüft —

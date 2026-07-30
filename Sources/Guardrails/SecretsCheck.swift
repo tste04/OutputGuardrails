@@ -36,7 +36,16 @@ public struct SecretsCheck: GuardrailCheck {
         (RuleCatalog.secretGitHubToken, "\\bgh[pousr]_[A-Za-z0-9]{36,}\\b", []),
         (RuleCatalog.secretSlackToken, "\\bxox[abprs]-[A-Za-z0-9-]{10,}\\b", []),
         (RuleCatalog.secretJWT, "\\bey[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b", []),
-        (RuleCatalog.secretAPIKey, "\\bsk-[A-Za-z0-9]{20,}\\b", []),
+        // `sk-` mit Bindestrichen im Rumpf: die aktuellen Schluessel von
+        // Anthropic (`sk-ant-api03-…`) und OpenAI (`sk-proj-…`) tragen
+        // Bindestriche, die das alte `[A-Za-z0-9]{20,}` ausgeschlossen hat —
+        // ausgerechnet die beiden Formate, die heute am haeufigsten in einem
+        // Modell-Ausgang landen, blieben damit unerkannt.
+        (RuleCatalog.secretAPIKey, "\\bsk-(?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){20,}", []),
+        (RuleCatalog.secretGitHubToken, "\\bgithub_pat_[A-Za-z0-9_]{22,}\\b", []),
+        (RuleCatalog.secretGitLabToken, "\\bglpat-[A-Za-z0-9_-]{20,}\\b", []),
+        (RuleCatalog.secretGoogleAPIKey, "\\bAIza[A-Za-z0-9_-]{35}\\b", []),
+        (RuleCatalog.secretStripeKey, "\\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}\\b", []),
     ]
 
     /// Ein Fund. Der Klarwert bleibt im Prozess; in Befunde wandert nur die
