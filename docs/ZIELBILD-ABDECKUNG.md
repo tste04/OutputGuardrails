@@ -15,7 +15,7 @@ vollständig?" — und benennt ehrlich, was bewusst nicht hier liegt.
 
 | Zielbild-Punkt | Umsetzung | Regel-IDs | Herkunft |
 |---|---|---|---|
-| **PII** | `PIICheck` — Mail, Telefon, IBAN, Anschrift, Name, Betreiber-Denylist | `PII-001`…`PII-005` | Neubau, an `conformance/pii-vectors.txt` gebunden |
+| **PII** | `PIICheck` — Name, Mail, Telefon, IBAN, Anschrift, Betreiber-Denylist | `PII-001`…`PII-005`, `PII-007` | Neubau, an `conformance/pii-vectors.txt` gebunden; IDs deckungsgleich mit AIGateway |
 | **Compliance** | `ComplianceCheck` — Pflichthinweise, untersagte Formulierungen, Längengrenze | `CMP-001`…`CMP-003` | Neubau, vollständig richtliniengesteuert |
 | **Security** | `SecretsCheck` (Zugangsdaten) + `ExfiltrationCheck` (Abflusskanäle, Injection-Echo, zerstörerische Befehle) | `SEC-001`…`SEC-006`, `EXF-001`…`EXF-004` | Neubau; SEC-IDs deckungsgleich mit AIGateway |
 | **Grounding & Citation Check** | `GroundingCheck` — Abstain-Schwelle, Belegpflicht, Nachprüfung unbelegter Angaben | `GRO-001`, `GRO-002`, `GRO-900` | Engram `Governance/Grounding.swift` |

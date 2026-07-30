@@ -21,13 +21,27 @@ public enum RuleCatalog {
     public static let unbackedClaim: RuleID = "GRO-002"
     public static let grounded: RuleID = "GRO-900"
 
-    // MARK: PII (PII)
+    // MARK: PII (PII) — IDs bewusst deckungsgleich mit AIGateway
+    //
+    // Die Nummerierung folgt `AIGateway/InputFirewall/PII/PseudonymizationPolicy`.
+    // Sie war frueher eine andere, und das war ein Fehler mit Folgen: dieselbe
+    // ID bedeutete auf der Eingangs- und der Ausgangsseite etwas anderes
+    // (PII-001 hiess hier „Mail", dort „Person"). Eine Suppression oder ein
+    // Dashboard auf „PII-003" traf damit auf der einen Seite Telefonnummern,
+    // auf der anderen IBANs — und nichts im Code hat widersprochen.
+    //
+    // PII-006 („Ort", also PLZ + Stadt) fuehrt das Gateway getrennt; hier deckt
+    // `piiAddress` beide Faelle ab. Die ID bleibt deshalb bewusst unbelegt,
+    // statt sie mit abweichender Bedeutung zu vergeben.
 
-    public static let piiMail: RuleID = "PII-001"
-    public static let piiPhone: RuleID = "PII-002"
-    public static let piiIBAN: RuleID = "PII-003"
-    public static let piiAddress: RuleID = "PII-004"
-    public static let piiPerson: RuleID = "PII-005"
+    public static let piiPerson: RuleID = "PII-001"
+    public static let piiMail: RuleID = "PII-002"
+    public static let piiPhone: RuleID = "PII-003"
+    public static let piiIBAN: RuleID = "PII-004"
+    public static let piiAddress: RuleID = "PII-005"
+    /// Betreiber-Denylist. Ein Treffer ist per Definition kein Personenname —
+    /// „Projekt Nordlicht" ist ein Vorhaben, kein Mensch.
+    public static let piiCustom: RuleID = "PII-007"
 
     // MARK: Zugangsdaten (SEC) — IDs bewusst deckungsgleich mit AIGateway
 
@@ -88,6 +102,8 @@ public enum RuleCatalog {
              title: "Ausgang steht auf Belegen"),
 
         // PII: jeder Fund ist ein Regelbruch, aber ein behebbarer (redigieren).
+        Rule(id: piiPerson, category: .pii, severity: .violation, weight: 0.40,
+             title: "Personenname im Ausgang"),
         Rule(id: piiMail, category: .pii, severity: .violation, weight: 0.50,
              title: "Mailadresse im Ausgang"),
         Rule(id: piiPhone, category: .pii, severity: .violation, weight: 0.50,
@@ -96,8 +112,8 @@ public enum RuleCatalog {
              title: "IBAN im Ausgang"),
         Rule(id: piiAddress, category: .pii, severity: .violation, weight: 0.50,
              title: "Anschrift im Ausgang"),
-        Rule(id: piiPerson, category: .pii, severity: .violation, weight: 0.40,
-             title: "Personenname im Ausgang"),
+        Rule(id: piiCustom, category: .pii, severity: .violation, weight: 0.50,
+             title: "Begriff der Betreiber-Denylist im Ausgang"),
 
         // Zugangsdaten: nichts davon darf je einen Ausgang verlassen.
         Rule(id: secretPrivateKey, category: .secret, severity: .violation, weight: 1.0,

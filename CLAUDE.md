@@ -51,11 +51,17 @@ Zielbilds bricht.
 
 - **Keine externen Abhängigkeiten.** Nur `Foundation`. `GuardrailCore` hat auch
   keine internen.
-- **Regel-IDs sind stabil.** `GRO-001`, `PII-003`, `SEC-001`, `EXF-001`,
+- **Regel-IDs sind stabil.** `GRO-001`, `PII-004`, `SEC-001`, `EXF-001`,
   `CMP-001`, `SCH-002`, `CON-001`, `OPS-001`. Suppressions, Audit und Dashboards
   binden daran; eine ID zu ändern ist ein Breaking Change, Hinzufügen ist
   erlaubt. `title`/`message` sind Anzeigetext und dürfen umformuliert werden.
-  Die `SEC`-Reihe ist absichtlich deckungsgleich mit AIGateway.
+  Die `SEC`- **und die `PII`-Reihe** sind absichtlich deckungsgleich mit
+  AIGateway (`InputFirewall/PII/PseudonymizationPolicy`): `PII-001` Person,
+  `-002` Mail, `-003` Telefon, `-004` IBAN, `-005` Anschrift, `-007` Denylist.
+  `PII-006` (Ort) führt nur das Gateway getrennt und bleibt hier unbelegt —
+  eine ID mit abweichender Bedeutung zu vergeben wäre schlimmer als eine Lücke.
+  `RuleCatalogParityTests` hält das fest; wer eine PII-ID ändert, muss die
+  Gegenseite mitändern.
 - **Die 9xx-Reihe ist für Info-Befunde reserviert und wiegt 0.** Ein „alles in
   Ordnung" darf niemals Risiko erzeugen — dafür gibt es einen Test.
 - **Fail-closed.** Unbekannte Regel-ID → `violation` mit vollem Gewicht. Kaputte

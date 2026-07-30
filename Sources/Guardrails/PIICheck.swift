@@ -21,6 +21,11 @@ public enum PIICategory: String, Codable, Sendable, CaseIterable {
     case iban
     case address
     case person
+    /// Treffer der Betreiber-Denylist. Eigene Kategorie, weil ein solcher
+    /// Begriff kein Personenname ist — „Projekt Nordlicht" ist ein Vorhaben.
+    /// Sie laesst sich nicht ueber `categories` abwaehlen: wer einen Begriff in
+    /// die Denylist schreibt, hat die Entscheidung schon getroffen.
+    case custom
 
     /// Die Katalogregel dieser Kategorie. Gewicht und Schweregrad stehen im
     /// `RuleCatalog`, nicht hier — die Stufe erkennt, die Policy entscheidet.
@@ -31,6 +36,7 @@ public enum PIICategory: String, Codable, Sendable, CaseIterable {
         case .iban: return RuleCatalog.piiIBAN
         case .address: return RuleCatalog.piiAddress
         case .person: return RuleCatalog.piiPerson
+        case .custom: return RuleCatalog.piiCustom
         }
     }
 }
@@ -175,11 +181,24 @@ public struct PIICheck: GuardrailCheck {
             }
         }
 
+        // Denylist: jede Fundstelle einzeln, mit der Schreibweise AUS DEM TEXT.
+        //
+        // Vorher wurde der konfigurierte Begriff gespeichert. Gefunden wurde
+        // case-insensitiv, ersetzt wird in `redact` aber case-sensitiv — bei
+        // „projekt nordlicht" im Text und „Projekt Nordlicht" in der Denylist
+        // meldete die Stufe also einen Treffer und liess den Klartext trotzdem
+        // stehen. Genau die Schreibweise, die im Text steht, muss ersetzbar sein.
         for term in denylist where !term.isEmpty {
-            guard text.range(of: term, options: .caseInsensitive) != nil else { continue }
-            let key = "person|\(term)"
-            guard seen.insert(key).inserted else { continue }
-            found.append(PIIMatch(category: .person, value: term))
+            var searchStart = text.startIndex
+            while let range = text.range(of: term, options: .caseInsensitive,
+                                         range: searchStart..<text.endIndex) {
+                let actual = String(text[range])
+                let key = "custom|\(actual)"
+                if seen.insert(key).inserted {
+                    found.append(PIIMatch(category: .custom, value: actual))
+                }
+                searchStart = range.upperBound
+            }
         }
         return found
     }

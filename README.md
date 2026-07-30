@@ -25,7 +25,7 @@ im [AIGateway](https://github.com/tste04/AIGateway).
 | Stufe | Zielbild-Punkt | Prüft | Regel-IDs |
 |---|---|---|---|
 | `GroundingCheck` | Grounding & Citation Check | Steht der Ausgang auf abrufbaren Belegen? Kommen Zahlen und Namen im Kontext vor? | `GRO-001`, `GRO-002` |
-| `PIICheck` | PII | Mail, Telefon, IBAN, Anschrift, Name, eigene Denylist | `PII-001`…`PII-005` |
+| `PIICheck` | PII | Name, Mail, Telefon, IBAN, Anschrift, eigene Denylist | `PII-001`…`PII-005`, `PII-007` |
 | `SecretsCheck` | Security | Zugangsdaten: privater Schlüssel, AWS, GitHub (klassisch + `github_pat_`), GitLab, Slack, JWT, Google `AIza`, Stripe, `sk-`/`sk-ant-`/`sk-proj-` | `SEC-001`…`SEC-009` |
 | `ExfiltrationCheck` | Security | Abflusskanäle (Bild-/Link-URL mit Nutzlast), Injection-Echo, zerstörerische Befehle | `EXF-001`…`EXF-004` |
 | `ComplianceCheck` | Compliance | Pflichthinweise, untersagte Formulierungen, Längengrenze — vollständig konfiguriert | `CMP-001`…`CMP-003` |
@@ -70,7 +70,7 @@ die Andockstelle für den Feedback-Loop des Zielbilds.
 - **Stufen erkennen, die Policy entscheidet.** Eine Prüfstufe nennt nur die
   Regel-ID; Schweregrad und Gewicht stehen im Regelkatalog, die Schwellen in der
   Policy. Schwellen ändern heißt nie, eine Erkennungsregel anzufassen.
-- **Regel-IDs sind stabil.** `GRO-001`, `PII-003`, `SEC-001`, … Suppressions,
+- **Regel-IDs sind stabil.** `GRO-001`, `PII-004`, `SEC-001`, … Suppressions,
   Audit und Dashboards binden daran; eine ID zu ändern ist ein Breaking Change.
   Die `SEC`-Reihe teilt die IDs bewusst mit der Eingangs-Firewall im AIGateway.
 - **Fehlalarme sind teuer.** Ein Fehlalarm blockiert eine korrekte Antwort.
