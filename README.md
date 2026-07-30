@@ -200,6 +200,24 @@ dieselben Zeilen gegen seine Eingangs-PII. Jeder neu gefundene Fehlalarm oder
 swift test
 ```
 
+Die CI prüft zusätzlich zwei Zusagen, die sonst blosse Behauptungen wären: den
+**Deployment-Floor** (Übersetzen gegen macOS 12, `swift-tools-version 5.7`) und
+den **CLI-Vertrag** (die Exit-Codes 0/1/2/64/70 an zwölf Fällen).
+
+Das Repo steht dabei für sich: keine Paket-Abhängigkeit außer `Foundation`, und
+kein Schritt setzt ein Nachbar-Repo voraus. `swift build && swift test` genügt.
+
+## Weiterlesen
+
+| Datei | Inhalt |
+|---|---|
+| [docs/STANDALONE.md](docs/STANDALONE.md) | Bibliothek, CLI und HTTP-Dienst im Betrieb |
+| [docs/ZIELBILD-ABDECKUNG.md](docs/ZIELBILD-ABDECKUNG.md) | Was das Zielbild verlangt und was hier liegt |
+| [SECURITY.md](SECURITY.md) | Meldeweg, Betriebsgrenzen, bewusst offene Punkte |
+| [CHANGELOG.md](CHANGELOG.md) | Änderungen, insbesondere Breaking Changes |
+| [CONTRIBUTING.md](CONTRIBUTING.md) · [CLA.md](CLA.md) | Beitragen und die Rechtekette |
+| [CLAUDE.md](CLAUDE.md) | Invarianten mit Begründung — die längste Fassung |
+
 ## Lizenz
 
 PolyForm Noncommercial 1.0.0 — siehe [LICENSE.md](LICENSE.md). Kommerzielle
