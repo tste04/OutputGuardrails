@@ -51,6 +51,26 @@ final class PIICheckTests: XCTestCase {
         XCTAssertEqual(check.detect(in: "+49 170 1234567").first?.category, .phone)
     }
 
+    /// So schreiben Menschen und Banking-Portale eine IBAN auf. Ohne die
+    /// Vierergruppen ginge die haeufigste Schreibweise ungeprueft durch.
+    func testIBANIsFoundInGroupedNotation() {
+        let check = PIICheck()
+        XCTAssertEqual(check.detect(in: "Bitte an DE89 3704 0044 0532 0130 00 überweisen.").first?.category,
+                       .iban)
+        XCTAssertEqual(check.detect(in: "IBAN: AT48 3200 0000 1234 5864").first?.category, .iban)
+
+        let redacted = check.redact("Konto DE89 3704 0044 0532 0130 00.")
+        XCTAssertTrue(redacted.contains("[Iban-1]"))
+        XCTAssertFalse(redacted.contains("0532"), "kein Rest der IBAN im Text")
+    }
+
+    /// Kurze Codes duerfen nicht als IBAN gelten — die Laengenuntergrenze ist
+    /// der einzige Schutz gegen Fehlalarme auf Bestell- und Ticketnummern.
+    func testShortCodesAreNotIBANs() {
+        let check = PIICheck()
+        XCTAssertTrue(check.detect(in: "Bestellung AB12 3456 folgt.").isEmpty)
+    }
+
     /// Der Grund fuer die strukturellen Anker in den Mustern: eine IP-Adresse,
     /// eine Belegnummer und eine Uhrzeit sind keine Personendaten.
     func testStructuralAnchorsPreventFalsePositives() {

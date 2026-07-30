@@ -105,7 +105,12 @@ public struct PIICheck: GuardrailCheck {
     private static let patterns: [(PIICategory, String)] = [
         (.mail, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"),
         // IBAN: Laenderkennung + Pruefziffern + 11–30 alphanumerische Zeichen.
-        (.iban, "\\b[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}\\b"),
+        // Zweite Alternative: die Vierergruppen, in denen Menschen eine IBAN
+        // aufschreiben und in denen jedes Banking-Portal sie anzeigt
+        // („DE89 3704 0044 0532 0130 00"). Ohne sie geht die haeufigste
+        // Schreibweise ungeprueft durch die Ausgangskontrolle.
+        (.iban, "\\b[A-Z]{2}[0-9]{2}(?:[A-Z0-9]{11,30}"
+              + "|(?: [A-Z0-9]{4}){2,7}(?: [A-Z0-9]{1,3})?)\\b"),
         // Telefon: braucht '+' oder eine fuehrende 0 — sonst treffen IP-Adressen,
         // Belegnummern und Betraege mit.
         (.phone, "(?:\\+|\\b0)[0-9][0-9 ()/-]{6,}[0-9]"),
