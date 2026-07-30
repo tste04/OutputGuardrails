@@ -57,6 +57,17 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
     Unbekannte Argumente führen jetzt zu Exit 64 mit der Liste der erlaubten.
     Ebenso `--port`: ein ungültiger Wert fiel still auf 8790 zurück.
 
+- **Abflusskanäle, die nie geprüft wurden.** `bareURLPattern` war deklariert
+  und wurde nirgends benutzt — eine nackte Abfluss-URL lief ungeprüft durch,
+  obwohl sie der einfachste Kanal überhaupt ist. HTML-`<img>` fehlte ganz,
+  dabei lädt es beim Rendern von selbst. Beide werden jetzt erfasst; mehrfach
+  gefundene Adressen ergeben einen Befund statt drei, damit der Risikowert
+  nicht künstlich steigt.
+- **Zerstörerische Befehle in ihrer gebräuchlichsten Schreibweise.**
+  `rm -rf /*` scheiterte an der Leerzeichen-Forderung hinter dem Schrägstrich,
+  `git push -f` war gar nicht abgedeckt (nur `--force`). Dazu `dd` auf ein
+  Blockgerät.
+
 - **`redact()` ließ Denylist-Treffer im Klartext stehen.** Gefunden wurde
   case-insensitiv, ersetzt case-sensitiv: bei „projekt nordlicht" im Text und
   „Projekt Nordlicht" in der Denylist meldete die Stufe einen Regelbruch und

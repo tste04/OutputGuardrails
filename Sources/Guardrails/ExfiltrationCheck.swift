@@ -41,8 +41,14 @@ public struct ExfiltrationCheck: GuardrailCheck {
     private static let imagePattern = "!\\[[^\\]]*\\]\\(([^)\\s]+)"
     /// Markdown-Link: `[text](url)`.
     private static let linkPattern = "(?<!!)\\[[^\\]]*\\]\\(([^)\\s]+)"
-    /// Nackte URL ohne Markdown-Rahmen.
-    private static let bareURLPattern = "https?://[^\\s<>\"]+"
+    /// Nackte URL ohne Markdown-Rahmen. Braucht einen Klick, laedt also nicht
+    /// von selbst — zaehlt deshalb als Link, nicht als Bild.
+    private static let bareURLPattern = "https?://[^\\s<>\"')\\]]+"
+    /// HTML-Bild. Wird beim Rendern genauso automatisch geladen wie die
+    /// Markdown-Form; viele Oberflaechen zeigen Modell-Ausgaben als HTML an.
+    /// Die Attributstrecke ist begrenzt, damit das Muster linear bleibt.
+    private static let htmlImagePattern =
+        "<img[^>]{0,200}?src\\s*=\\s*[\"']?([^\"'\\s>]+)"
 
     /// Anweisungs-Echo. Bewusst dieselben Formulierungen wie die
     /// Injection-Konformanz-Vektoren des Zielbilds — was am Eingang als
@@ -57,13 +63,19 @@ public struct ExfiltrationCheck: GuardrailCheck {
     ]
 
     /// Zerstoererische Befehle. Nur Formen, die ohne Kontext eindeutig sind.
+    ///
+    /// Die Wurzel-Variante deckt `/`, `/*` und `/ --no-preserve-root` mit ab:
+    /// vorher verlangte sie hinter dem Schraegstrich ein Leerzeichen oder das
+    /// Zeilenende, womit ausgerechnet `rm -rf /*` durchlief.
     private static let destructivePatterns = [
-        "\\brm\\s+-[a-zA-Z]*[rf][a-zA-Z]*\\s+/(?:\\s|$)",
+        "\\brm\\s+-[a-zA-Z]*[rf][a-zA-Z]*\\s+/(?:\\*|\\s|$)",
         "\\brm\\s+-[a-zA-Z]*[rf][a-zA-Z]*\\s+~",
         "\\bDROP\\s+(TABLE|DATABASE)\\b",
         "\\bTRUNCATE\\s+TABLE\\b",
-        "\\bgit\\s+push\\s+--force\\b",
+        // `-f` ist die gebraeuchlichere Schreibweise als `--force`.
+        "\\bgit\\s+push\\s+(?:--force\\b|--force-with-lease\\b|-f\\b)",
         "\\bmkfs(\\.[a-z0-9]+)?\\b",
+        "\\bdd\\s+if=/dev/(?:zero|random|urandom)\\s+of=/dev/[a-z]",
         ":\\(\\)\\s*\\{\\s*:\\|:&\\s*\\}\\s*;\\s*:",
     ]
 
@@ -72,22 +84,47 @@ public struct ExfiltrationCheck: GuardrailCheck {
     public func inspect(_ context: OutputContext) -> [Finding] {
         var findings: [Finding] = []
 
-        for url in Regex.matches(Self.imagePattern, in: context.output) {
-            let target = Self.url(from: url, prefix: "![")
-            guard !isAllowed(target), carriesPayload(target) else { continue }
-            findings.append(Finding(
-                check: name, rule: RuleCatalog.exfiltrationImage,
-                message: "Bild-URL traegt eine Nutzlast und wird beim Rendern automatisch abgerufen — stiller Abfluss.",
-                evidence: Self.shorten(target)))
+        // Alle Fundstellen zuerst einsammeln, dann je Ziel-URL EINEN Befund.
+        //
+        // Reihenfolge ist Rangfolge: eine Bild-URL steckt auch im nackten
+        // URL-Muster, und ein Bild wiegt schwerer, weil es beim Rendern von
+        // selbst geladen wird. Ohne die Zusammenfassung meldete dieselbe
+        // Adresse bis zu drei Befunde und triebe den Risikowert kuenstlich hoch.
+        var byTarget: [String: RuleID] = [:]
+        var order: [String] = []
+
+        func note(_ target: String, _ rule: RuleID) {
+            guard !isAllowed(target), carriesPayload(target) else { return }
+            if byTarget[target] == nil { order.append(target) }
+            // Bild schlaegt Link — nie andersherum.
+            if byTarget[target] == nil || rule == RuleCatalog.exfiltrationImage {
+                byTarget[target] = rule
+            }
         }
 
+        for url in Regex.matches(Self.imagePattern, in: context.output) {
+            note(Self.url(from: url, prefix: "!["), RuleCatalog.exfiltrationImage)
+        }
+        for url in Regex.matches(Self.htmlImagePattern, in: context.output,
+                                 options: [.caseInsensitive]) {
+            note(Self.htmlImageURL(from: url), RuleCatalog.exfiltrationImage)
+        }
         for url in Regex.matches(Self.linkPattern, in: context.output) {
-            let target = Self.url(from: url, prefix: "[")
-            guard !isAllowed(target), carriesPayload(target) else { continue }
-            findings.append(Finding(
-                check: name, rule: RuleCatalog.exfiltrationLink,
-                message: "Link traegt eine auffaellig lange oder kodierte Nutzlast.",
-                evidence: Self.shorten(target)))
+            note(Self.url(from: url, prefix: "["), RuleCatalog.exfiltrationLink)
+        }
+        // Zuletzt die nackten URLs: was schon als Bild oder Link erfasst ist,
+        // bleibt dabei — `note` ueberschreibt einen Bild-Befund nicht.
+        for url in Regex.matches(Self.bareURLPattern, in: context.output) {
+            note(url, RuleCatalog.exfiltrationLink)
+        }
+
+        for target in order {
+            let rule = byTarget[target] ?? RuleCatalog.exfiltrationLink
+            let message = rule == RuleCatalog.exfiltrationImage
+                ? "Bild-URL traegt eine Nutzlast und wird beim Rendern automatisch abgerufen — stiller Abfluss."
+                : "Link traegt eine auffaellig lange oder kodierte Nutzlast."
+            findings.append(Finding(check: name, rule: rule, message: message,
+                                    evidence: Self.shorten(target)))
         }
 
         for pattern in Self.echoPatterns {
@@ -143,6 +180,19 @@ public struct ExfiltrationCheck: GuardrailCheck {
     private static func url(from match: String, prefix: String) -> String {
         guard let open = match.range(of: "](", options: .backwards) else { return match }
         return String(match[open.upperBound...])
+    }
+
+    /// Schaelt die Adresse aus einem `<img …src="…"`-Treffer.
+    ///
+    /// Gesucht wird das erste `=` NACH dem `src` — nicht das letzte im Treffer.
+    /// Das letzte steckt regelmaessig in der URL selbst (`?d=…`), und genau die
+    /// Nutzlast will die Stufe ja bewerten.
+    private static func htmlImageURL(from match: String) -> String {
+        guard let src = match.range(of: "src", options: .caseInsensitive) else { return match }
+        let rest = match[src.upperBound...]
+        guard let equals = rest.firstIndex(of: "=") else { return match }
+        return String(rest[rest.index(after: equals)...])
+            .trimmingCharacters(in: CharacterSet(charactersIn: " \"'"))
     }
 
     /// Befunde tragen keine vollstaendige Abfluss-URL — sonst steht die Beute im

