@@ -26,7 +26,7 @@ im [AIGateway](https://github.com/tste04/AIGateway).
 |---|---|---|---|
 | `GroundingCheck` | Grounding & Citation Check | Steht der Ausgang auf abrufbaren Belegen? Kommen Zahlen und Namen im Kontext vor? | `GRO-001`, `GRO-002` |
 | `PIICheck` | PII | Mail, Telefon, IBAN, Anschrift, Name, eigene Denylist | `PII-001`…`PII-005` |
-| `SecretsCheck` | Security | Zugangsdaten: privater Schlüssel, AWS, GitHub, Slack, JWT, `sk-` | `SEC-001`…`SEC-006` |
+| `SecretsCheck` | Security | Zugangsdaten: privater Schlüssel, AWS, GitHub (klassisch + `github_pat_`), GitLab, Slack, JWT, Google `AIza`, Stripe, `sk-`/`sk-ant-`/`sk-proj-` | `SEC-001`…`SEC-009` |
 | `ExfiltrationCheck` | Security | Abflusskanäle (Bild-/Link-URL mit Nutzlast), Injection-Echo, zerstörerische Befehle | `EXF-001`…`EXF-004` |
 | `ComplianceCheck` | Compliance | Pflichthinweise, untersagte Formulierungen, Längengrenze — vollständig konfiguriert | `CMP-001`…`CMP-003` |
 | `SchemaCheck` | Schema Validation | Hat strukturierter Ausgang die zugesagte Form? | `SCH-001`…`SCH-007` |
