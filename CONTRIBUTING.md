@@ -1,81 +1,109 @@
-# Contributing to OutputGuardrails
+# Beitragen zu OutputGuardrails
 
-Thank you for considering a contribution — issues, ideas and pull requests are welcome.
+Issues, Ideen und Pull Requests sind willkommen.
 
-## The one rule: the CLA
+## Die eine Regel: die CLA
 
-OutputGuardrails is **dual-licensed** (free for noncommercial use under PolyForm Noncommercial,
-commercial licenses sold separately). For that model — and for the project's ability to
-ever change its licensing or transfer the codebase as a whole — the maintainer must
-hold sufficient rights to *all* of the code.
+OutputGuardrails ist **doppelt lizenziert** — nichtkommerziell frei unter PolyForm
+Noncommercial, kommerziell kostenpflichtig (siehe [COMMERCIAL.md](COMMERCIAL.md)).
+Damit dieses Modell trägt und die Lizenzierung später überhaupt änderbar bleibt,
+muss der Maintainer ausreichende Rechte an **allem** Code halten.
 
-Therefore every contribution requires agreeing to the
-**[Contributor License Agreement](docs/CLA.md)**. Short version: you keep the copyright
-to your contribution, and you grant the maintainer a perpetual, irrevocable,
-transferable license to use, relicense and sublicense it under any terms.
+Jeder Beitrag setzt deshalb die Zustimmung zur
+**[Contributor License Agreement](CLA.md)** voraus. Kurz: das Urheberrecht an
+deinem Beitrag bleibt bei dir, und du erteilst dem Maintainer ein
+unbefristetes, unwiderrufliches und übertragbares Recht, ihn zu nutzen und unter
+beliebigen Bedingungen weiterzulizenzieren.
 
-Agreement is expressed per pull request: add this line to your PR description —
+Die Zustimmung steht je Pull Request in der Beschreibung:
 
 ```
-I have read docs/CLA.md and I agree to it for this and all my future contributions.
+Ich habe CLA.md gelesen und stimme ihr für diesen und alle künftigen Beiträge zu.
 ```
 
-PRs without it can't be merged, no exceptions — this protects the project's chain of
-title.
+Ohne diese Zeile kann ein PR nicht gemerged werden — das schützt die
+Rechtekette, nicht die Laune des Maintainers.
 
-## Practical notes
+## Praktisches
 
-- Build: `swift build` (Swift 5.7+, macOS 12+ / Linux). Release: `swift build -c release`.
-- Tests: `swift test` — everything runs in-process, no network and no credentials
-  required; they must stay that way. Narrow the run with
-  `swift test --filter InputFirewallTests` (target), `--filter PIIRoundTripTests`
-  (class) or
-  `--filter InputFirewallTests.PIIRoundTripTests/testMaskThenUnmaskRestoresOriginal`
-  (single test).
-- There is no linter, no CI configuration and no executable target — `GatewayService`
-  is started by a host program (example in the README).
-- The design rationale lives in [`docs/DECISIONS.md`](docs/DECISIONS.md). It is
-  binding, not descriptive: changing a decision recorded there means amending that
-  file with a reason and a date, in the same PR.
+```bash
+swift build              # Swift 5.7+, macOS 12+
+swift test               # alles in-process: kein Netz, keine Zugangsdaten
+swift test --filter GuardrailsTests                    # ein Target
+swift test --filter PIICheckTests                      # eine Klasse
+swift test --filter PIICheckTests/testShortCodesAreNotIBANs   # ein Test
+```
 
-## Hard invariants
+Es gibt ein ausführbares Target (`guardrails`, siehe
+[docs/STANDALONE.md](docs/STANDALONE.md)) und eine CI
+([.github/workflows/ci.yml](.github/workflows/ci.yml)). Die CI baut zusätzlich
+gegen den Deployment-Floor **macOS 12** und prüft die Exit-Codes der
+Kommandozeile — beides sind zugesagte Schnittstellen, keine Nebensache.
 
-PRs violating these will be declined regardless of usefulness.
+Es gibt keinen Linter. Halte dich an den Ton der umliegenden Dateien.
 
-- **`Foundation` is the only dependency.** Adding a package dependency breaks the
-  design, not just a guideline.
-- **Audit events never carry payload.** Rule IDs, categories, sizes, times — never
-  the prompt, never match excerpts, not even temporarily for debugging.
-  `AuditEvent(decision:principal:)` is the only intended path and drops the payload
-  on purpose.
-- **Rule IDs are stable.** `INJ-001`, `SEC-002`, `PII-004`, `SAN-003`, `ANO-001`,
-  `GW-001`, `PII-900`. Suppressions, SIEM rules and dashboards bind to them; changing
-  one is a breaking change. Adding is fine, and `message` text is free to reword.
-- **Scanners detect, the policy decides.** A `ContentScanner` returns findings and a
-  score; it never decides to block. Logic of the form "block above score X" must not
-  move into a scanner — thresholds have to stay changeable without touching a
-  detection rule.
-- **Pipeline order is fixed** (see `docs/DECISIONS.md`): size guard → injection →
-  PII masking → DLP → semantic cache → upstream. Masking must stay *before* cache
-  key construction, and the cache lookup must stay *after* the firewall.
-- **Normalization is for comparison only.** `TextNormalizer` builds a detection
-  surface; what gets forwarded is always the merely sanitized text. Folding
-  homoglyphs in the payload would destroy legitimate non-Latin content.
-- **Fail-closed stays fail-closed.** An unknown source type resolves to `untrusted`,
-  not `neutral` — do not "fix" that default.
-- **PII findings do not block.** They carry weight 0 and yield `.allowModified`; the
-  density guard with `onDensityExceeded: "abstain"` is the single exception.
-- **No hand-written TLS or crypto.** The server binds to loopback by default and
-  termination is the operator's job via a reverse proxy.
+## Harte Invarianten
 
-## Conventions
+PRs, die eine davon verletzen, werden unabhängig vom Nutzen abgelehnt. Die
+Begründungen stehen bei den Invarianten selbst in
+[CLAUDE.md](CLAUDE.md) — dort ausführlicher als hier.
 
-- Every source file starts with `// Copyright (c) 2026 Tommy Stellmacher` and
+- **`Foundation` ist die einzige Abhängigkeit.** `GuardrailCore` hat auch keine
+  internen. Eine Paket-Abhängigkeit hinzuzufügen bricht den Entwurf, nicht bloß
+  eine Richtlinie.
+- **Stufen erkennen, die Policy entscheidet.** Ein `GuardrailCheck` liefert
+  Befunde mit einer Regel-ID und trifft nie eine Block-Entscheidung. Logik der
+  Form „ab Gewicht X blocken" darf nicht in eine Stufe wandern — sonst sind
+  Schwellen nicht mehr änderbar, ohne eine Erkennungsregel anzufassen.
+- **Regel-IDs sind stabil.** `GRO-001`, `PII-004`, `SEC-001`, `EXF-001`,
+  `CMP-001`, `SCH-002`, `CON-001`, `OPS-001`. Suppressions, Audit und Dashboards
+  binden daran; eine ID zu ändern ist ein Breaking Change und gehört in den
+  [CHANGELOG](CHANGELOG.md). Hinzufügen ist erlaubt, `title`/`message` sind
+  Anzeigetext und dürfen umformuliert werden.
+  Die **`SEC`- und die `PII`-Reihe sind deckungsgleich mit dem
+  [AIGateway](https://github.com/tste04/AIGateway)** — wer eine davon ändert,
+  muss die Gegenseite mitändern. `RuleCatalogParityTests` hält das fest.
+- **Die 9xx-Reihe ist für Bestätigungen reserviert, wiegt 0 und hebt das Urteil
+  nicht an.** Ein „alles in Ordnung" darf weder Risiko erzeugen noch einen
+  `flag` auslösen.
+- **Fail-closed.** Unbekannte Regel-ID → `violation` mit vollem Gewicht. Kaputte
+  Policy-Datei → Abbruch, nicht Voreinstellung. Unübersetzbares Muster aus der
+  Policy → Abbruch beim Laden, nicht „kein Treffer".
+- **Kein Netz, kein Zustand, keine I/O in den Prüfstufen.** Gleicher Kontext →
+  gleiche Befunde. Nur so ist ein Guardrail-Ergebnis auditierbar. Wer ein Modell
+  braucht, implementiert `AsyncGuardrailCheck`.
+- **Befunde tragen keinen Klartext.** `Finding.evidence` enthält Fundstellen,
+  bei PII nur die maskierte Form. `GuardrailReport.auditLine` enthält niemals
+  den geprüften Ausgang — dafür gibt es einen Test.
+- **Eine übersprungene Prüfung ist kein bestandener Test.** Steht kein Modell
+  bereit oder wurde deterministisch schon geblockt, wird `skipped` gemeldet.
+- **Kein selbstgebautes TLS, keine eigene Krypto.** Der Dienst bindet auf
+  Loopback; jenseits davon verlangt er ein Token, und die Strecke sichert der
+  Betreiber (Reverse Proxy, WireGuard).
+- **Exit-Codes der CLI sind Schnittstelle:** 0 allow · 1 flag · 2 block ·
+  64 Aufruffehler · 70 intern. Skripte binden daran.
+- **Swift-Tools 5.7.** Keine Regex-Literale, keine `Regex<Output>`-API —
+  `NSRegularExpression` über die `Regex`-Hülle. Deployment-Floor macOS 12.
+
+## Fehlalarme sind teuer
+
+Ein Fehlalarm blockiert eine korrekte Antwort. Muster brauchen deshalb
+strukturelle Anker statt „viele Ziffern": Telefon verlangt `+` oder führende
+`0`, ein Personenname verlangt Anrede, Feldbezeichner oder einen bekannten
+Vornamen. Großschreibung allein trägt im Deutschen nichts — dort steht jedes
+Substantiv groß.
+
+Wer eine Erkennung erweitert, bringt in demselben PR **beide** Richtungen mit:
+den Fall, der jetzt erkannt wird, und den ähnlich aussehenden, der weiterhin
+durchgehen muss.
+
+## Konventionen
+
+- Jede Quelldatei beginnt mit `// Copyright (c) 2026 Tommy Stellmacher` und
   `// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0`.
-- Comments are German and transliterated without umlauts in source files
-  (`Groessen`, `aendern`); Markdown under `docs/` and the README use real umlauts.
-- Comments explain **why**, not what — match the existing tone rather than
-  annotating the obvious.
-- Tests are XCTest, grouped by behaviour rather than one class per type. PII tests
-  run with `baseDirectory: nil` (in-memory vault, deterministic).
-- Concurrent state lives in actors; everything publicly visible is `Sendable`.
+- **Kommentare deutsch, in Quelldateien umlautfrei transliteriert**
+  (`Groessen`, `aendern`); Markdown mit echten Umlauten.
+- Kommentare begründen **warum**, nicht was.
+- Tests sind XCTest, nach Verhalten gruppiert statt eine Klasse je Typ.
+- Nebenläufiger Zustand lebt in Actors; alles öffentlich Sichtbare ist
+  `Sendable`.

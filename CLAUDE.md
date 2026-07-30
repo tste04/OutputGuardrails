@@ -62,15 +62,21 @@ Zielbilds bricht.
   eine ID mit abweichender Bedeutung zu vergeben wäre schlimmer als eine Lücke.
   `RuleCatalogParityTests` hält das fest; wer eine PII-ID ändert, muss die
   Gegenseite mitändern.
-- **Die 9xx-Reihe ist für Info-Befunde reserviert und wiegt 0.** Ein „alles in
-  Ordnung" darf niemals Risiko erzeugen — dafür gibt es einen Test.
+- **Die 9xx-Reihe ist für Bestätigungen reserviert, wiegt 0 und hebt das Urteil
+  nicht an.** Ein „alles in Ordnung" darf weder Risiko erzeugen noch einen
+  `flag` auslösen (`RuleID.isPositiveConfirmation`). `OPS-001` („Prüfstufe nicht
+  ausgeführt") gehört bewusst nicht dazu — eine übersprungene Prüfung ist keine
+  Bestätigung und soll unter `.strict` auffallen.
 - **Fail-closed.** Unbekannte Regel-ID → `violation` mit vollem Gewicht. Kaputte
-  Policy-Datei → Abbruch, nicht Voreinstellung.
+  Policy-Datei → Abbruch, nicht Voreinstellung. Ein nicht übersetzbares Muster
+  aus der Policy → Abbruch beim Laden, nicht „kein Treffer".
 - **Policy-Felder sind einzeln optional.** Wer nur eine Schwelle ändert, schreibt
   nur diese; nicht genannte Felder behalten die Voreinstellung. Deshalb hat jede
   Konfigurationsstruktur ein eigenes `init(from:)`.
 - **Kein TLS im Server, kein Krypto-Eigenbau.** Loopback ist Default, nicht
   Empfehlung: der Dienst sieht genau die Inhalte, die nicht abfließen sollen.
+  Jenseits von Loopback (`--allow-remote`) ist ein Bearer-Token Pflicht — der
+  Start bricht sonst ab. Siehe [SECURITY.md](SECURITY.md).
 - **Kein Netz, kein Zustand, keine I/O in den Prüfstufen.** Gleicher Kontext →
   gleiche Befunde. Das ist die Voraussetzung dafür, dass ein Guardrail-Ergebnis
   auditierbar ist. Wer ein Modell braucht, implementiert `AsyncGuardrailCheck`.
@@ -118,10 +124,21 @@ setzt `personDetection: .anyCapitalizedChain`.
 
 ## Nach jeder Änderung an Prüf-Semantik
 
+Das Repo steht für sich: `swift build && swift test` ist alles, was ein Beitrag
+braucht, und die CI prüft zusätzlich Deployment-Floor und CLI-Vertrag. Kein
+Schritt in diesem Repo setzt ein Nachbar-Repo voraus.
+
+**Nur wenn das Zielbild-Repo daneben liegt** (`../Zielbild`), gilt zusätzlich:
+
 ```
-cd ../Zielbild && make parity
+cd ../Zielbild && make parity        # Inventar gegen die Realität
+cd ../Zielbild && make conformance   # Vektor-Kopien gegen das Original
 ```
 
 Und wenn eine Funktion aus Engram hier ankommt: die Inventar-Zeile in
 `Zielbild/inventar/inventar.tsv` umziehen (`repo`/`pfad` ändern, `status` auf
 `umgezogen`) — Zeilen werden nie gelöscht.
+
+Fehlt `../Zielbild`, entfällt beides ersatzlos. Die Kopie der Konformanz-Vektoren
+unter `Tests/GuardrailsTests/Vectors/` liegt im Repo und wird von den Tests
+gelesen — der Konformanz-Test läuft also auch allein.

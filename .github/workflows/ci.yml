@@ -17,3 +17,69 @@ jobs:
         run: swift build -v
       - name: Test
         run: swift test -v
+
+  # Der Deployment-Floor ist eine harte Invariante (macOS 12, Swift-Tools 5.7,
+  # Intel-Prototyp). Der Job oben baut gegen das SDK des Runners und wuerde eine
+  # versehentlich benutzte 13+-API deshalb NICHT bemerken — sie faellt dann erst
+  # auf der Zielmaschine auf. Hier wird explizit gegen macOS 12 uebersetzt.
+  deployment-floor:
+    name: Untergrenze macOS 12
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools-Version ist 5.7
+        run: |
+          head -1 Package.swift | grep -q 'swift-tools-version: *5\.7' \
+            || { echo "Package.swift deklariert nicht mehr tools-version 5.7"; exit 1; }
+      - name: Bauen gegen macOS 12
+        run: swift build -v -Xswiftc -target -Xswiftc x86_64-apple-macosx12.0
+
+  # Die Exit-Codes sind laut CONTRIBUTING eine zugesagte Schnittstelle: Skripte
+  # binden daran. Ohne diesen Job waeren sie eine Behauptung — es gibt kein
+  # Testtarget fuer die Kommandozeile, weil `main.swift` Top-Level-Code ist.
+  cli-contract:
+    name: CLI-Exit-Codes
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bauen
+        run: swift build -c release
+      - name: Exit-Codes pruefen
+        shell: bash
+        run: |
+          set -u
+          BIN=.build/release/guardrails
+
+          check() {   # erwarteter_code  beschreibung  befehl...
+            local want=$1 what=$2; shift 2
+            "$@" >/dev/null 2>&1
+            local got=$?
+            if [ "$got" != "$want" ]; then
+              echo "FEHLER  $what: erwartet $want, bekommen $got"
+              return 1
+            fi
+            echo "ok      $what ($got)"
+          }
+
+          printf 'Der Start ist im Mai.' > beleg.txt
+          printf 'Der Start ist im Mai.' > sauber.txt
+          printf 'Schreib an max.mustermann@example.com' > pii.txt
+
+          fails=0
+          check 0 "allow"            $BIN check --input sauber.txt --source beleg.txt --query "Wann?" --quiet || fails=1
+          check 2 "block bei PII"    $BIN check --input pii.txt --source beleg.txt --query "Wann?" --quiet || fails=1
+          check 0 "selftest"         $BIN selftest || fails=1
+          check 0 "rules"            $BIN rules || fails=1
+          check 0 "config"           $BIN config || fails=1
+          check 64 "unbekanntes Flag" $BIN check --input sauber.txt --tippfehler || fails=1
+          check 64 "=-Schreibweise"   $BIN check --config=policy.json || fails=1
+          check 64 "unbekannter Befehl" $BIN quatsch || fails=1
+          check 64 "ungueltiger Port"   $BIN serve --port 99999 || fails=1
+          check 64 "remote ohne Token"  $BIN serve --allow-remote || fails=1
+          check 70 "kaputte Policy-Datei" bash -c "echo '{ kaputt' > p.json; $BIN check --input sauber.txt --config p.json" || fails=1
+
+          # Eine Policy, deren Muster sich nicht uebersetzen laesst, darf nicht laden.
+          echo '{"compliance":{"forbiddenPatterns":["garantiert [risikofrei"]}}' > schlecht.json
+          check 70 "unuebersetzbares Muster" $BIN check --input sauber.txt --config schlecht.json || fails=1
+
+          exit $fails
