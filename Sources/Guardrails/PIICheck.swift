@@ -64,15 +64,36 @@ public struct PIIMatch: Sendable, Equatable {
 public struct PIICheck: GuardrailCheck {
     public let name = "pii"
 
+    /// Wie streng eine grossgeschriebene Wortkette als Person gilt.
+    public enum PersonDetection: String, Codable, Sendable, CaseIterable {
+        /// Eine Kette gilt nur mit Anker (Anrede, Titel, Label, bekannter
+        /// Vorname). Voreinstellung — im Deutschen die einzige brauchbare
+        /// Variante, weil Substantive grossgeschrieben werden.
+        case anchored
+        /// Jede Kette aus zwei grossgeschriebenen Woertern gilt als Person.
+        /// Maximale Trefferquote, sehr viele Fehlalarme in deutschem Text —
+        /// nur fuer englischsprachige Ausgaenge oder Hoechstschutz-Betrieb.
+        case anyCapitalizedChain
+    }
+
     /// Welche Kategorien geprueft werden.
     public let categories: Set<PIICategory>
     /// Zusaetzliche Begriffe, die als Personenbezug gelten (Betreiber-Denylist).
     public let denylist: [String]
+    /// Strenge der Namensketten-Erkennung.
+    public let personDetection: PersonDetection
+    /// Vornamen des Betreibers (z. B. aus dem Mitarbeiterverzeichnis), die als
+    /// Anker zaehlen. Gross-/Kleinschreibung egal.
+    public let additionalFirstNames: Set<String>
 
     public init(categories: Set<PIICategory> = Set(PIICategory.allCases),
-                denylist: [String] = []) {
+                denylist: [String] = [],
+                personDetection: PersonDetection = .anchored,
+                additionalFirstNames: [String] = []) {
         self.categories = categories
         self.denylist = denylist
+        self.personDetection = personDetection
+        self.additionalFirstNames = Set(additionalFirstNames.map { $0.lowercased() })
     }
 
     // MARK: - Muster
@@ -95,10 +116,21 @@ public struct PIICheck: GuardrailCheck {
     ]
 
     /// Namensketten: jedes Wort ein Grossbuchstabe gefolgt von Kleinbuchstaben.
-    /// Das schliesst Abkuerzungen und Codes aus („Beleg ORD" ist kein Mensch) und
-    /// laesst „Erika Musterfrau" durch. Fuehrende Satzanfaenge filtert
-    /// `GermanText` heraus.
+    /// Das schliesst Abkuerzungen und Codes aus („Beleg ORD" ist kein Mensch).
+    /// Ueber den Anker in `GermanText.anchoredPersonName` wird daraus ein
+    /// Personen-Fund — die Kette allein ist im Deutschen kein Namenssignal.
     private static let nameChainPattern = "\\p{Lu}\\p{Ll}+(?: \\p{Lu}\\p{Ll}+)+"
+
+    /// Anrede, Titel oder Label mit nur EINEM folgenden Wort („Herr Schmidt",
+    /// „Ansprechpartner: Weber"). Die Kette oben verlangt zwei Woerter und
+    /// wuerde den Fall verfehlen; der Anker traegt ihn allein.
+    /// Der Anker-Teil wiederholt sich, damit „Frau Dr. Meier" nicht nach dem
+    /// ersten Titel abbricht und den Namen verliert.
+    private static let titledNamePattern =
+        "\\b(?:(?:Herrn?|Frau|Hr\\.|Fr\\.|Dr\\.|Prof\\.|Mr\\.|Mrs\\.|Ms\\."
+        + "|Name|Vorname|Nachname|Kontakt|Absender|Empf(?:ae|ä)nger|Ansprechpartner"
+        + "|Sachbearbeiter|Betreuer|Verfasser|Autor|gez\\.)"
+        + ":?\\s+)+\\p{Lu}\\p{Ll}+"
 
     // MARK: - Erkennung
 
@@ -115,8 +147,23 @@ public struct PIICheck: GuardrailCheck {
         }
 
         if categories.contains(.person) {
+            for value in Regex.matches(Self.titledNamePattern, in: text) {
+                guard let chain = GermanText.anchoredPersonName(
+                    value, extraFirstNames: additionalFirstNames) else { continue }
+                let key = "person|\(chain)"
+                guard seen.insert(key).inserted else { continue }
+                found.append(PIIMatch(category: .person, value: chain))
+            }
             for value in Regex.matches(Self.nameChainPattern, in: text) {
-                guard let chain = GermanText.strippedNameChain(value) else { continue }
+                let chain: String?
+                switch personDetection {
+                case .anchored:
+                    chain = GermanText.anchoredPersonName(
+                        value, extraFirstNames: additionalFirstNames)
+                case .anyCapitalizedChain:
+                    chain = GermanText.strippedNameChain(value)
+                }
+                guard let chain = chain else { continue }
                 let key = "person|\(chain)"
                 guard seen.insert(key).inserted else { continue }
                 found.append(PIIMatch(category: .person, value: chain))

@@ -75,8 +75,11 @@ die Andockstelle für den Feedback-Loop des Zielbilds.
   Die `SEC`-Reihe teilt die IDs bewusst mit der Eingangs-Firewall im AIGateway.
 - **Fehlalarme sind teuer.** Ein Fehlalarm blockiert eine korrekte Antwort.
   Deshalb brauchen die Muster strukturelle Anker statt „viele Ziffern":
-  Telefon verlangt `+` oder führende `0`, Namensketten filtern deutsche
-  Satzanfänge — sonst meldet „Das Meeting" eine Person.
+  Telefon verlangt `+` oder führende `0`; ein Personenname verlangt eine
+  Anrede, einen Feldbezeichner oder einen bekannten Vornamen. Großschreibung
+  allein trägt im Deutschen nichts — dort steht jedes Substantiv groß, „Kurzer
+  Zwischenschritt" ist keine Person. Eigene Namen ergänzt man über
+  `PIICheck(additionalFirstNames:)`.
 
 ## Schnellstart
 

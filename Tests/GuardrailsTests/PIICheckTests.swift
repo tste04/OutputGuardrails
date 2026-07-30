@@ -67,6 +67,52 @@ final class PIICheckTests: XCTestCase {
         XCTAssertEqual(check.detect(in: "Erika Musterfrau kommt später.").first?.category, .person)
     }
 
+    /// Der Kern des Problems im Deutschen: Substantive stehen gross, also sieht
+    /// jede Nominalphrase wie ein Name aus. Ohne Anker duerfen diese Ketten
+    /// keinen Personenbezug melden — sonst blockiert der Guardrail jeden
+    /// zweiten normalen Satz.
+    func testGermanNounPhrasesAreNotPeople() {
+        let check = PIICheck(categories: [.person])
+        for phrase in ["Kurzer Zwischenschritt", "Offene Punkte bleiben",
+                       "Technische Schulden wachsen", "Neue Anforderung erfasst",
+                       "Interner Bericht liegt vor", "Wichtige Entscheidung steht an"] {
+            XCTAssertTrue(check.detect(in: phrase).isEmpty,
+                          "Fehlalarm auf Nominalphrase: \(phrase)")
+        }
+    }
+
+    /// Anrede, Titel und Feldbezeichner tragen den Fund allein — ein Nachname
+    /// ohne Vornamen wird nur so erkannt.
+    func testTitlesAndLabelsAnchorASingleName() {
+        let check = PIICheck(categories: [.person])
+        XCTAssertEqual(check.detect(in: "Bitte an Herr Schmidt weiterleiten.").first?.value,
+                       "Schmidt")
+        XCTAssertEqual(check.detect(in: "Frau Dr. Meier hat unterschrieben.").first?.value,
+                       "Meier")
+        XCTAssertEqual(check.detect(in: "Ansprechpartner: Weber").first?.value, "Weber")
+        // Die Anrede selbst ist kein Name.
+        XCTAssertTrue(check.detect(in: "Sehr geehrte Frau, ...").isEmpty)
+    }
+
+    /// Die kuratierte Vornamensliste deckt nicht jeden Namen ab. Betreiber
+    /// schliessen die Luecke mit ihrem eigenen Verzeichnis statt mit einem
+    /// Muster, das jede Nominalphrase blockt.
+    func testOperatorCanExtendFirstNames() {
+        let plain = PIICheck(categories: [.person])
+        XCTAssertTrue(plain.detect(in: "Aiko Tanaka war dabei.").isEmpty)
+
+        let extended = PIICheck(categories: [.person], additionalFirstNames: ["Aiko"])
+        XCTAssertEqual(extended.detect(in: "Aiko Tanaka war dabei.").first?.value, "Aiko Tanaka")
+    }
+
+    /// Fuer englischsprachige Ausgaenge bleibt die alte, weite Erkennung
+    /// waehlbar — mit dem dokumentierten Preis vieler Fehlalarme im Deutschen.
+    func testAnyCapitalizedChainModeRestoresTheWideNet() {
+        let wide = PIICheck(categories: [.person], personDetection: .anyCapitalizedChain)
+        XCTAssertEqual(wide.detect(in: "Kurzer Zwischenschritt").first?.value,
+                       "Kurzer Zwischenschritt")
+    }
+
     /// Abkuerzungen und Codes sind keine Menschen: die Namenskette verlangt
     /// Grossbuchstabe + Kleinbuchstaben je Wort, sonst meldet „Beleg ORD" eine Person.
     func testAllCapsTokensAreNotNames() {

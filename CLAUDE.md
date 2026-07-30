@@ -87,9 +87,18 @@ Zielbilds bricht.
 Ein Fehlalarm blockiert eine korrekte Antwort. Deshalb brauchen die Muster
 strukturelle Anker statt „viele Ziffern": Telefon verlangt `+` oder führende `0`
 (sonst treffen IP-Adressen und Belegnummern), Adresse verlangt Straßen-Suffix
-plus Hausnummer, Namensketten verlangen Großbuchstabe + Kleinbuchstaben je Wort
-und filtern führende Artikel über `GermanText.sentenceStarters` — sonst meldet
-„Das Meeting" eine Person und „Beleg ORD" auch.
+plus Hausnummer.
+
+Für Personennamen reicht ein Muster grundsätzlich nicht: **im Deutschen stehen
+Substantive groß**, also sieht jede Nominalphrase wie ein Name aus („Kurzer
+Zwischenschritt", „Offene Punkte"). Deshalb braucht ein Personen-Fund einen
+**Anker** — Anrede/Titel („Herr Schmidt"), Feldbezeichner („Ansprechpartner:
+Weber") oder einen bekannten Vornamen aus `GermanText.commonFirstNames`.
+Der Preis ist bewusst gewählt und benannt: ein Nachname ganz ohne Anker wird
+nicht erkannt. Diese Lücke schließen Betreiber über
+`PIICheck(additionalFirstNames:)` oder die Denylist — **nicht** über ein
+weiteres Muster. Wer die alte weite Erkennung braucht (englische Ausgänge),
+setzt `personDetection: .anyCapitalizedChain`.
 
 ## Konventionen
 
