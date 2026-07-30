@@ -50,11 +50,14 @@ public struct GuardrailService: Sendable {
     public enum RequestError: Error, CustomStringConvertible {
         case notAnObject
         case missingOutput
+        case badTimestamp(String)
 
         public var description: String {
             switch self {
             case .notAnObject: return "Anfrage ist kein JSON-Objekt"
             case .missingOutput: return "Feld 'output' fehlt"
+            case .badTimestamp(let raw):
+                return "occurredAt ist kein ISO-8601-Zeitstempel: '\(raw)'"
             }
         }
     }
@@ -66,7 +69,7 @@ public struct GuardrailService: Sendable {
         guard let output = root["output"] as? String else { throw RequestError.missingOutput }
 
         let query = root["query"] as? String ?? ""
-        let sources = (root["sources"] as? [[String: Any]] ?? []).map(decodeSource)
+        let sources = try (root["sources"] as? [[String: Any]] ?? []).map(decodeSource)
         let knownFacts = (root["knownFacts"] as? [[String: Any]] ?? []).map(decodeFact)
         let assertedFacts = (root["assertedFacts"] as? [[String: Any]] ?? []).map(decodeFact)
         let schema = (root["schema"] as? [String: Any]).flatMap(SchemaNode.fromJSONSchema)
@@ -76,8 +79,21 @@ public struct GuardrailService: Sendable {
                              assertedFacts: assertedFacts)
     }
 
-    private static func decodeSource(_ dict: [String: Any]) -> GroundingSource {
-        let occurred = (dict["occurredAt"] as? String).flatMap(iso8601.date(from:)) ?? Date()
+    private static func decodeSource(_ dict: [String: Any]) throws -> GroundingSource {
+        // Der Zeitstempel bestimmt Aktualitaet und damit die Bewertung eines
+        // Belegs. Frueher fiel jeder unlesbare Wert still auf 'jetzt' zurueck —
+        // ein alter Beleg wurde damit zum taufrischen. Betroffen war vor allem
+        // die haeufigste Quelle ueberhaupt: JavaScripts toISOString() liefert
+        // Sekundenbruchteile, die der Standard-Formatierer nicht annimmt.
+        let occurred: Date
+        if let raw = dict["occurredAt"] as? String {
+            guard let parsed = iso8601.date(from: raw) ?? iso8601Fractional.date(from: raw) else {
+                throw RequestError.badTimestamp(raw)
+            }
+            occurred = parsed
+        } else {
+            occurred = Date()
+        }
         return GroundingSource(
             id: dict["id"] as? String ?? "",
             sourceType: dict["sourceType"] as? String ?? "unknown",
@@ -154,4 +170,13 @@ public struct GuardrailService: Sendable {
     }
 
     static let iso8601 = ISO8601DateFormatter()
+    /// Zweite Lesart mit Sekundenbruchteilen. `new Date().toISOString()` in
+    /// JavaScript liefert genau diese Form ("2026-07-30T12:00:00.123Z") — der
+    /// Standard-Formatierer weist sie zurueck, und damit waere die haeufigste
+    /// Quelle ueberhaupt unlesbar.
+    static let iso8601Fractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

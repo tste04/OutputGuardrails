@@ -109,3 +109,59 @@ final class FailClosedTests: XCTestCase {
         _ = GuardrailPipeline.lightweight(compliance: policy).inspect(context)
     }
 }
+
+/// Zwei stille Wege, auf denen die Anfrage-Dekodierung das Ergebnis verfaelschte.
+final class RequestDecodingTests: XCTestCase {
+
+    private func decode(_ json: String) throws -> OutputContext {
+        try GuardrailService.decodeRequest(Data(json.utf8))
+    }
+
+    /// Der Score ist mit 1.0 vorbelegt, also galt `[{}]` als tragfaehiger
+    /// Treffer — die Belegpflicht liess sich mit einem leeren Objekt erfuellen.
+    /// Ein Beleg ohne Inhalt kann nichts belegen.
+    func testEmptySourceObjectDoesNotSatisfyCitations() throws {
+        let context = try decode(#"{"output":"Behauptung.","sources":[{}]}"#)
+        let report = GuardrailPipeline.standard().inspect(context)
+        XCTAssertEqual(report.verdict, .block)
+        XCTAssertTrue(report.citations.isEmpty)
+    }
+
+    func testRealSourceStillGrounds() throws {
+        let context = try decode(#"""
+        {"output":"Der Start ist im Mai.","query":"Wann?",
+         "sources":[{"id":"e1","content":"Der Start ist im Mai."}]}
+        """#)
+        XCTAssertEqual(GuardrailPipeline.standard().inspect(context).verdict, .allow)
+    }
+
+    /// `new Date().toISOString()` liefert Sekundenbruchteile — die haeufigste
+    /// Quelle ueberhaupt. Der Standard-Formatierer weist sie zurueck, und der
+    /// Wert fiel still auf „jetzt" zurueck: aus einem alten Beleg wurde damit
+    /// ein taufrischer.
+    func testFractionalSecondsAreParsed() throws {
+        let context = try decode(#"""
+        {"output":"x","sources":[{"id":"e1","content":"c","occurredAt":"2026-07-30T12:00:00.123Z"}]}
+        """#)
+        let occurred = try XCTUnwrap(context.sources.first?.occurredAt)
+        XCTAssertEqual(occurred.timeIntervalSince1970, 1785412800.123, accuracy: 1.0)
+    }
+
+    func testPlainISO8601StillParses() throws {
+        let context = try decode(#"""
+        {"output":"x","sources":[{"id":"e1","content":"c","occurredAt":"2026-07-30T12:00:00Z"}]}
+        """#)
+        XCTAssertNotNil(context.sources.first?.occurredAt)
+    }
+
+    /// Unlesbares wird gemeldet, nicht ersetzt.
+    func testUnparseableTimestampIsReported() {
+        XCTAssertThrowsError(try decode(#"""
+        {"output":"x","sources":[{"id":"e1","content":"c","occurredAt":"gestern"}]}
+        """#)) { error in
+            guard case GuardrailService.RequestError.badTimestamp = error else {
+                return XCTFail("falscher Fehler: \(error)")
+            }
+        }
+    }
+}

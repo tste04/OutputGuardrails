@@ -66,7 +66,15 @@ public struct GroundingCheck: GuardrailCheck {
 
     /// Die Treffer, die die Schwelle tragen.
     public func groundedSources(in context: OutputContext) -> [GroundingSource] {
-        context.sources.filter { $0.score >= policy.minScore }
+        // Inhalt ist Pflicht, nicht nur ein guter Score. Ein Beleg ohne Text
+        // kann nichts belegen — es gibt nichts, wogegen sich pruefen liesse.
+        // Ueber die HTTP-Schnittstelle genuegte sonst `"sources": [{}]`, um die
+        // Belegpflicht zu erfuellen: der Score ist dort mit 1.0 vorbelegt, also
+        // galt ein leeres Objekt als tragfaehiger Treffer.
+        context.sources.filter {
+            $0.score >= policy.minScore
+                && !$0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     /// Belege aus den tragfaehigen Treffern formen.

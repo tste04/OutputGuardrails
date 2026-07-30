@@ -83,6 +83,16 @@ folgenlos für Bestandsnutzer und werden jetzt gemacht, solange sie billig sind.
   stillzulegen — der Bericht meldete `allow`, weil derselbe Befund später wieder
   herausfiel.
 
+- **Die Belegpflicht ließ sich mit einem leeren Objekt erfüllen.** Über die
+  HTTP-Schnittstelle genügte `"sources": [{}]`: der Score ist mit `1.0`
+  vorbelegt, also galt ein Objekt ohne jeden Inhalt als tragfähiger Treffer.
+  Ein Beleg ohne Text kann nichts belegen — `groundedSources` verlangt jetzt
+  Inhalt, und zwar auf der fachlichen Ebene, nicht nur im Transport.
+- **`occurredAt` mit Sekundenbruchteilen fiel still auf „jetzt" zurück.** Genau
+  diese Form liefert `new Date().toISOString()`; aus einem alten Beleg wurde
+  damit ein taufrischer. Beide Schreibweisen werden jetzt gelesen, und ein
+  wirklich unlesbarer Wert wird gemeldet statt ersetzt.
+
 - **Grounding-Befunde trugen Personennamen im Klartext.** Eine unbelegte
   Namenskette *ist* ein Personenname, und `evidence` wandert in Logs und Audit —
   die Invariante „Befunde tragen keinen Klartext" galt für PII, nicht hier.
